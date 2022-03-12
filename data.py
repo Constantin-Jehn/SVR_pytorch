@@ -15,7 +15,8 @@ def nii_to_torch(filename):
     img = nib.load(path)
     epi_image = t.tensor(img.get_fdata())
     affine = t.tensor(img.affine)
-    return epi_image, affine
+    zooms = t.tensor(img.header.get_zooms())
+    return epi_image, affine, zooms
 
 def torch_to_nii(data,affine):
     data = data.numpy().astype('int16')
@@ -30,5 +31,3 @@ def show_slice(t_image):
       axes[i].imshow(t.transpose(t_image[:,:,i],1,0), cmap="gray", origin="lower")
     return 0
       
-
-
