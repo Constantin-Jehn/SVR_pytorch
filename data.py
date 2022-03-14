@@ -23,7 +23,7 @@ def save_nifti(nifti_image, filename):
     path = os.path.join('data', filename + '.nii.gz')
     nib.save(nifti_image, path)
 
-def show_slice(t_image):
+def show_stack(t_image):
     """ Function to display row of image slices """
     fig, axes = plt.subplots(1, t_image.shape[2])
     for i in range(t_image.shape[2]):

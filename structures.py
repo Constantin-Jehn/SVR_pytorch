@@ -2,51 +2,6 @@ import numpy as np
 import torch as t
 import nibabel as nib
 
-class slice_2d:
-    def __init__(self, data, affine):
-        #2d image
-        self.data = data
-        self.affine = affine
-        self.T = t.eye(4)
-        self.W_s = t.eye(4)
-        self.F = self.F()
-        self.F_inv = self.F_inv()
-        self.p_s = self.p_s()
-        
-    def F(self):
-        """Function to calculate transition matrix F = inv(W_s) * inv(T) * W_r \in R^(4x4)"""
-        W_s_inv = t.linalg.inv(self.W_s).float()
-        T_inv = t.linalg.inv(self.T).float()
-        F = t.matmul(t.matmul(W_s_inv,T_inv), self.affine.float())
-        self.F = F
-        return F
-    
-    def F_inv(self):
-        """Function to calculate transition matrix F_inv = inv(W_r) * T * W \in R^(4x4) """
-        W_r_inv = t.linalg.inv(self.affine).float()
-        F_inv = t.matmul(t.matmul(W_r_inv,self.T.float()).float(),self.W_s.float())
-        self.F_inv = F_inv
-        return F_inv
-    
-    def p_s(self):
-        """gives pixel representation (i,j,0,1, value)^T for the slice"""
-        x_lin,y_lin = t.linspace(0,self.data.shape[0]-1,self.data.shape[0]), t.linspace(0,self.data.shape[1]-1,self.data.shape[1])
-        x_grid, y_grid = t.meshgrid(x_lin, y_lin)
-        coordinates = t.stack((t.flatten(x_grid), t.flatten(y_grid)), dim = 0)
-        add_on = t.tensor([[0],[1]]).repeat(1,coordinates.shape[1])
-        values = self.data.flatten()[None,:]
-        pixels = t.cat((coordinates, add_on, values),0)
-        self.p_s = pixels
-        return self.p_s
-        
-    def corners(self):
-        """Function to calculates the extreme points of the slice in world coordinates"""
-        p_r = t.matmul(self.F_inv.float(),self.p_s[:4,:].float())
-        p_r_max = t.max(p_r[:3,:], dim = 1).values
-        p_r_min = t.min(p_r[:3,:], dim = 1).values
-        corners = t.stack((p_r_min,p_r_max)).transpose(0,1)
-        return corners
-    
 class stack:
     """models one stack of images"""
     def __init__(self, I, affine, beta):
@@ -69,12 +24,12 @@ class stack:
         self.T[2,3,:] = t.linspace(0,self.k-1,self.k)
         #list ofimage to world transformations
         self.W_s = t.eye(4).unsqueeze(2).repeat(1,1,self.k)
-        self.F = self.F()
-        self.F_inv = self.F_inv()
+        self.F = self.create_F()
+        self.F_inv = self.create_F_inv()
         #matrix of corresponding voxel R(5,l*l*k) (includes value)
-        self.p_r = self.p_r()
+        self.p_r = self.create_p_r()
         #pixel representation R(4,l*l)
-        self.p_s = self.p_s()
+        self.p_s = self.create_p_s()
     
     def rank_D(self):
         return t.matrix_rank(self.D).item()
@@ -95,7 +50,7 @@ class stack:
             r +=1
         return (r*error).item()
     
-    def F(self):
+    def create_F(self):
         """Function to calculate F, mapping pixels from the stack to voxels world coordinates R^(4,4,k)"""
         #inverse is batch_first --> therefore permute
         W_s_inv = t.linalg.inv(self.W_s.permute(2,0,1).float())
@@ -107,7 +62,7 @@ class stack:
         self.F = F
         return F.float()
     
-    def F_inv(self):
+    def create_F_inv(self):
         """Function to calculate F_invers, voxels from world coordinates to pixels in stack R^(4,4,k)"""
         W_inv = t.linalg.inv(self.affine.float()).float()
         F_inv = t.einsum('ij,jnb->inb',W_inv.float(),self.T.float())
@@ -115,17 +70,23 @@ class stack:
         self.F_inv = F_inv
         return F_inv.float()
     
-    def p_s(self):
+    def create_p_s(self):
+        """Function to create represenation of image in voxel space R^(5xl*l,k) (i,j,0,1,value)"""
         x_lin,y_lin = t.linspace(0,self.I.shape[0]-1,self.I.shape[0]), t.linspace(0,self.I.shape[1]-1,self.I.shape[1])
         x_grid, y_grid = t.meshgrid(x_lin, y_lin)
         coordinates = t.stack((t.flatten(x_grid), t.flatten(y_grid)), dim = 0)
-        add_on = t.tensor([[0],[1]]).repeat(1,coordinates.shape[1])
+        add_on = t.tensor([[0],[1],[0]]).repeat(1,coordinates.shape[1])
         pixels = t.cat((coordinates, add_on),0)
+        pixels = pixels[:,:,None].repeat(1,1,self.k)
+        for i in range(0,self.k):
+            data = self.I[:,:,i]
+            values = data.flatten()[None,:]
+            pixels[4,:,i] = values
         self.p_s = pixels
         return self.p_s
         
        
-    def p_r(self):
+    def create_p_r(self):
         """Function to calculate p_r the continuous voxel position in world coordinates - according to current transformation"""
         x_lin,y_lin,k_lin = t.linspace(0,self.I.shape[0]-1,self.I.shape[0]), t.linspace(0,self.I.shape[1]-1,self.I.shape[1]), t.linspace(0,self.I.shape[2]-1,self.I.shape[2])
         x_grid, y_grid = t.meshgrid(x_lin, y_lin)
@@ -199,11 +160,23 @@ class volume:
         affine = t.tensor(nib.affines.from_matvec(zooms.numpy(),translations.numpy()))
         self.affine = affine
         return affine
-        
-        
-        
-        
-        
-        
-        
     
+    def register_stack(self, stack):
+        for sl in range(0,stack.k):
+            F = stack.F[:,:,sl]
+            p_s_tilde = self.p_s_tilde(F)
+            p_s = stack.p_s[:,:,sl]
+            
+            p_s_tilde_t = p_s_tilde.transpose(0,1).float()
+            p_s_t = p_s.transpose(0,1).float()
+            distance_matrix = t.cdist(p_s_t[:,:4], p_s_tilde_t)
+            
+            closest_ps_tilde = t.min(distance_matrix,1).indices
+            
+            distance_vector = t.sub(p_s[:3,:],p_s_tilde[:3,closest_ps_tilde])
+            
+            for i in range(0,closest_ps_tilde.shape[0]):
+                target_index = closest_ps_tilde[i]
+                self.p_r[4,target_index] += PSN_Gauss(distance_vector[:,i])*p_s[4,i]
+            self.update_X()
+            print(f'slice {sl} registered')
