@@ -1,13 +1,8 @@
 import os
-import numpy as np
 import nibabel as nib
 import matplotlib.pyplot as plt
-
 import torch as t
 
-import transformations as trans
-
-from stack import stack
 
 def nii_to_torch(filename):
     """opens nifti file from /data and return data and affine as torch tensors"""
@@ -19,10 +14,14 @@ def nii_to_torch(filename):
     return epi_image, affine, zooms
 
 def torch_to_nii(data,affine):
-    data = data.numpy().astype('int16')
-    affine = affine.numpy().astype('int16')
-    new_img = nib.Nifti2Image(data,affine)
+    data = data.numpy()
+    affine = affine.numpy()
+    new_img = nib.Nifti1Image(data,affine)
     return new_img
+
+def save_nifti(nifti_image, filename):
+    path = os.path.join('data', filename + '.nii.gz')
+    nib.save(nifti_image, path)
 
 def show_slice(t_image):
     """ Function to display row of image slices """

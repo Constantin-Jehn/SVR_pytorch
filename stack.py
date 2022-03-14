@@ -1,13 +1,52 @@
-import os
 import numpy as np
-import nibabel as nib
-import matplotlib.pyplot as plt
-import open3d as o3d
-
 import torch as t
+import nibabel as nib
 
-import transformations as trans
-
+class slice_2d:
+    def __init__(self, data, affine):
+        #2d image
+        self.data = data
+        self.affine = affine
+        self.T = t.eye(4)
+        self.W_s = t.eye(4)
+        self.F = self.F()
+        self.F_inv = self.F_inv()
+        self.p_s = self.p_s()
+        
+    def F(self):
+        """Function to calculate transition matrix F = inv(W_s) * inv(T) * W_r \in R^(4x4)"""
+        W_s_inv = t.linalg.inv(self.W_s).float()
+        T_inv = t.linalg.inv(self.T).float()
+        F = t.matmul(t.matmul(W_s_inv,T_inv), self.affine.float())
+        self.F = F
+        return F
+    
+    def F_inv(self):
+        """Function to calculate transition matrix F_inv = inv(W_r) * T * W \in R^(4x4) """
+        W_r_inv = t.linalg.inv(self.affine).float()
+        F_inv = t.matmul(t.matmul(W_r_inv,self.T.float()).float(),self.W_s.float())
+        self.F_inv = F_inv
+        return F_inv
+    
+    def p_s(self):
+        """gives pixel representation (i,j,0,1, value)^T for the slice"""
+        x_lin,y_lin = t.linspace(0,self.data.shape[0]-1,self.data.shape[0]), t.linspace(0,self.data.shape[1]-1,self.data.shape[1])
+        x_grid, y_grid = t.meshgrid(x_lin, y_lin)
+        coordinates = t.stack((t.flatten(x_grid), t.flatten(y_grid)), dim = 0)
+        add_on = t.tensor([[0],[1]]).repeat(1,coordinates.shape[1])
+        values = self.data.flatten()[None,:]
+        pixels = t.cat((coordinates, add_on, values),0)
+        self.p_s = pixels
+        return self.p_s
+        
+    def corners(self):
+        """Function to calculates the extreme points of the slice in world coordinates"""
+        p_r = t.matmul(self.F_inv.float(),self.p_s[:4,:].float())
+        p_r_max = t.max(p_r[:3,:], dim = 1).values
+        p_r_min = t.min(p_r[:3,:], dim = 1).values
+        corners = t.stack((p_r_min,p_r_max)).transpose(0,1)
+        return corners
+    
 class stack:
     """models one stack of images"""
     def __init__(self, I, affine, beta):
@@ -32,8 +71,10 @@ class stack:
         self.W_s = t.eye(4).unsqueeze(2).repeat(1,1,self.k)
         self.F = self.F()
         self.F_inv = self.F_inv()
-        #matrix of corresponding voxel R(4,l*l*)
-        self.p_r = self.p_r
+        #matrix of corresponding voxel R(5,l*l*k) (includes value)
+        self.p_r = self.p_r()
+        #pixel representation R(4,l*l)
+        self.p_s = self.p_s()
     
     def rank_D(self):
         return t.matrix_rank(self.D).item()
@@ -74,14 +115,24 @@ class stack:
         self.F_inv = F_inv
         return F_inv.float()
     
+    def p_s(self):
+        x_lin,y_lin = t.linspace(0,self.I.shape[0]-1,self.I.shape[0]), t.linspace(0,self.I.shape[1]-1,self.I.shape[1])
+        x_grid, y_grid = t.meshgrid(x_lin, y_lin)
+        coordinates = t.stack((t.flatten(x_grid), t.flatten(y_grid)), dim = 0)
+        add_on = t.tensor([[0],[1]]).repeat(1,coordinates.shape[1])
+        pixels = t.cat((coordinates, add_on),0)
+        self.p_s = pixels
+        return self.p_s
+        
+       
     def p_r(self):
-        """Function to calculate p_r the continuous voxel position in world coordinates"""
+        """Function to calculate p_r the continuous voxel position in world coordinates - according to current transformation"""
         x_lin,y_lin,k_lin = t.linspace(0,self.I.shape[0]-1,self.I.shape[0]), t.linspace(0,self.I.shape[1]-1,self.I.shape[1]), t.linspace(0,self.I.shape[2]-1,self.I.shape[2])
         x_grid, y_grid = t.meshgrid(x_lin, y_lin)
         coordinates = t.stack((t.flatten(x_grid), t.flatten(y_grid)), dim = 0)
         add_on = t.tensor([[0],[1]]).repeat(1,coordinates.shape[1])
         pixels = t.cat((coordinates, add_on),0)
-        output = t.einsum('ijk,jl->ilk',self.F,pixels)
+        output = t.einsum('ijk,jl->ilk',self.F_inv,pixels)
         #switch order for consistency with 2d coordinates
         k_grid, x_grid, y_grid = t.meshgrid(k_lin, x_lin, y_lin)
         coordinates_3d = t.stack((t.flatten(x_grid), t.flatten(y_grid), t.flatten(k_grid)), dim = 0).int().numpy()
@@ -90,20 +141,31 @@ class stack:
         output = t.cat((output,values),0)
         self.p_r = output
         return self.p_r
-
+    
+    def corners(self):
+        """Function to get the "corners" of the stack in world coordinates to estimate the target volume size"""
+        p_r_max = t.max(self.p_r[:3,:], dim = 1).values
+        p_r_min = t.min(self.p_r[:3,:], dim = 1).values
+        corners = t.stack((p_r_min,p_r_max)).transpose(0,1)
+        return corners
     
 
-def PSN_Gauss(offset,sigmas = [1,1,1]):
+def PSN_Gauss(offset,sigmas = [10,10,10]):
     """Gaussian pointspreadfunction higher sigma --> sharper kernel"""
     return float(np.exp(-(offset[0]**2)/sigmas[0]**2 - (offset[1]**2)/sigmas[1]**2 - (offset[2]**2)/sigmas[2]**2))
     
 
 class volume:
     def __init__(self,geometry, n_voxels):
-        self.X = self.create_voxel_mesh(geometry, n_voxels)
+        self.p_r = self.create_voxel_mesh(geometry, n_voxels)
+        self.geometry = geometry
+        self.n_voxels = n_voxels
+        self.X = 0
+        self.update_X()
+        self.affine = self.create_affine()
         
-    def create_voxel_mesh(geometry,n_voxels):
-        """Function to create the voxel mesh. i.e. the target volume X
+    def create_voxel_mesh(self, geometry,n_voxels):
+        """Function to create the voxel mesh. i.e. the target volume X R^(5,l*l)
         Inputs: 
         geometry: [[x_min, x_max],[y_min, y_max],[z_min, z_max]]
         voxels[n_x, n_y, n_z] numer of voxels in each dimension
@@ -118,8 +180,30 @@ class volume:
         add_on = t.tensor([[1],[0]]).repeat(1,coordinates.shape[1])
         voxels = t.cat((coordinates,add_on),0)
         return voxels
+    
+    def p_s_tilde(self,F):
+        """Function returns the "ideal" pixels in in the slice space R(4,n_voxels_total,n_slices_per_stack)"""
+        #indexing on p_r because last row contains the intensity value
+        return t.matmul(F.float(),self.p_r[:4,:].float())
+    
+    def update_X(self):
+        X_shape  = (self.n_voxels[0].item(), self.n_voxels[1].item(), self.n_voxels[2].item())
+        X = self.p_r[4,:].view(X_shape)
+        self.X = X
+    
+    def create_affine(self):
+        """creates the affine of a volume according to definition of geometry and resolution of voxels"""
+        lengths = self.geometry[:,1] - self.geometry[:,0]
+        zooms = t.diag(t.div(lengths,self.n_voxels))
+        translations = - self.geometry[:,0]
+        affine = t.tensor(nib.affines.from_matvec(zooms.numpy(),translations.numpy()))
+        self.affine = affine
+        return affine
         
-    
-    
+        
+        
+        
+        
+        
         
     
