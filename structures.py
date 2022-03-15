@@ -1,6 +1,13 @@
+"""
+Module for the structures of stacks and volumes
+variable name mainly follow Fast Volume Reconstruction From Motion Corrupted Stack of 2D slices (Kainz 2015)
+"""
+
 import numpy as np
 import torch as t
 import nibabel as nib
+import time
+
 
 class stack:
     """models one stack of images"""
@@ -26,10 +33,10 @@ class stack:
         self.W_s = t.eye(4).unsqueeze(2).repeat(1,1,self.k)
         self.F = self.create_F()
         self.F_inv = self.create_F_inv()
-        #matrix of corresponding voxel R(5,l*l*k) (includes value)
-        self.p_r = self.create_p_r()
-        #pixel representation R(4,l*l)
+        #pixel representation R(5,l*l) (i,j,0,1,value)
         self.p_s = self.create_p_s()
+        #matrix of corresponding voxel R(5,l*l,k) (x,y,z,0,value)
+        self.p_r = self.create_p_r()
     
     def rank_D(self):
         return t.matrix_rank(self.D).item()
@@ -78,6 +85,7 @@ class stack:
         add_on = t.tensor([[0],[1],[0]]).repeat(1,coordinates.shape[1])
         pixels = t.cat((coordinates, add_on),0)
         pixels = pixels[:,:,None].repeat(1,1,self.k)
+        #add values for use during registration later
         for i in range(0,self.k):
             data = self.I[:,:,i]
             values = data.flatten()[None,:]
@@ -87,17 +95,22 @@ class stack:
         
        
     def create_p_r(self):
-        """Function to calculate p_r the continuous voxel position in world coordinates - according to current transformation"""
+        """Function to calculate p_r the continuous voxel position in world coordinates R^(5xl*l,k) (x,y,z,0,value) - according to current transformation F"""
+        #create mesh 
         x_lin,y_lin,k_lin = t.linspace(0,self.I.shape[0]-1,self.I.shape[0]), t.linspace(0,self.I.shape[1]-1,self.I.shape[1]), t.linspace(0,self.I.shape[2]-1,self.I.shape[2])
-        x_grid, y_grid = t.meshgrid(x_lin, y_lin)
-        coordinates = t.stack((t.flatten(x_grid), t.flatten(y_grid)), dim = 0)
-        add_on = t.tensor([[0],[1]]).repeat(1,coordinates.shape[1])
-        pixels = t.cat((coordinates, add_on),0)
+        #data points in voxel coordinates
+        pixels = self.p_s[:4,:,0]
+        
+        #transform into reference coordinate system
         output = t.einsum('ijk,jl->ilk',self.F_inv,pixels)
-        #switch order for consistency with 2d coordinates
+        #switch order for consistency with 2d coordinates and create mes
         k_grid, x_grid, y_grid = t.meshgrid(k_lin, x_lin, y_lin)
         coordinates_3d = t.stack((t.flatten(x_grid), t.flatten(y_grid), t.flatten(k_grid)), dim = 0).int().numpy()
+        
+        #extract the values
         values = self.I[coordinates_3d][None,:]
+        
+        #bring output in 2d formate (x,y,z,0)...
         output = output.reshape(output.shape[0],output.shape[1]*output.shape[2])
         output = t.cat((output,values),0)
         self.p_r = output
@@ -113,8 +126,10 @@ class stack:
 
 def PSN_Gauss(offset,sigmas = [10,10,10]):
     """Gaussian pointspreadfunction higher sigma --> sharper kernel"""
-    return float(np.exp(-(offset[0]**2)/sigmas[0]**2 - (offset[1]**2)/sigmas[1]**2 - (offset[2]**2)/sigmas[2]**2))
+    return t.exp(-(offset[0]**2)/sigmas[0]**2 - (offset[1]**2)/sigmas[1]**2 - (offset[2]**2)/sigmas[2]**2).float()
     
+def PSN_Gauss_vec(offset, sigmas = [10,10,10]):
+    return t.exp(-t.div(offset[:,0]**2,sigmas[0]**2) -t.div(offset[:,1]**2,sigmas[2]**2) -t.div(offset[:,2]**2,sigmas[2]**2)).float()
 
 class volume:
     def __init__(self,geometry, n_voxels):
@@ -160,31 +175,82 @@ class volume:
         affine = t.tensor(nib.affines.from_matvec(zooms.numpy(),translations.numpy()))
         self.affine = affine
         return affine
-    
-    def register_stack(self, stack):
+     
+    def register_stack(self, stack, time_it = False):
+        """Function to register 2d slice to volume"""
         for sl in range(0,stack.k):
+            
+            if time_it:
+                t2 = time.time()
+                
+            #get F of current slice
             F = stack.F[:,:,sl]
             p_s_tilde = self.p_s_tilde(F)
             p_s = stack.p_s[:,:,sl]
-            
+            #transpose for distance tensor
             p_s_tilde_t = p_s_tilde.transpose(0,1).float()
             p_s_t = p_s.transpose(0,1).float()
-            distance_matrix = t.cdist(p_s_t[:,:4], p_s_tilde_t)
             
-            closest_ps_tilde = t.min(distance_matrix,1).indices
+            if time_it:
+                print(f'initialization: {time.time()-t2}')
+                t1 = time.time()
+                
+            #create distance tensor (n_voxels, n_pixels, 3) has difference in all three dimensions
+            distance_tensor = t.abs(p_s_t[:,:3].unsqueeze(0) - p_s_tilde_t[:,:3].unsqueeze(1))
+            if time_it:
+                print(f'distance vector: {time.time()-t1}')
+                t2 = time.time()
             
-            distance_vector = t.sub(p_s[:3,:],p_s_tilde[:3,closest_ps_tilde])
+            #for being inside voxel all distances (in voxel space) must be < 1
+            #get indices that match from voxel to pixel [(voxel_index),(pixel_index)]
+            indices = t.where(t.all(distance_tensor < 1,2))
+            #number of matches
+            length = list(indices[0].shape)[0]
             
-            for i in range(0,closest_ps_tilde.shape[0]):
-                target_index = closest_ps_tilde[i]
-                self.p_r[4,target_index] += PSN_Gauss(distance_vector[:,i])*p_s[4,i]
+            if time_it:
+                print(f'distance evaluation: {time.time()-t2}')
+                t2  = time.time()
+            
+            #extract relevant p_s and calculate PSN vectorized
+            relevant_p_s = p_s[4,indices[1]]
+            relevant_dist = distance_tensor[indices[0],indices[1],:]
+            gauss = PSN_Gauss_vec(relevant_dist)
+            value = t.multiply(gauss, relevant_p_s)
+            
+            #add values to corresponding voxels
+            for voxel in range(0,length):
+                self.p_r[4,indices[0][voxel]] += value[voxel]
+            
+            if time_it:
+                print(f'voxel assignmet: {time.time()-t2}')
             self.update_X()
             print(f'slice {sl} registered')
-        
-        
-        
-        
-        
-        
-        
-    
+            
+            
+                # def register_stack(self, stack):
+    #     """Function to register a stack into the target volume"""
+    #     #iterate over slices in stack
+    #     for sl in range(0,stack.k):
+    #         #tra
+    #         F = stack.F[:,:,sl]
+    #         p_s_tilde = self.p_s_tilde(F)
+    #         p_s = stack.p_s[:,:,sl]
+            
+    #         p_s_tilde_t = p_s_tilde.transpose(0,1).float()
+    #         p_s_t = p_s.transpose(0,1).float()
+    #         distance_matrix = t.cdist(p_s_t[:,:4], p_s_tilde_t)
+            
+    #         closest_ps_tilde = t.min(distance_matrix,1).indices
+            
+    #         distance_vector = t.sub(p_s[:3,:],p_s_tilde[:3,closest_ps_tilde])
+            
+    #         for i in range(0,closest_ps_tilde.shape[0]):
+    #             target_index = closest_ps_tilde[i]
+    #             self.p_r[4,target_index] += PSN_Gauss(distance_vector[:,i])*p_s[4,i]
+    #         self.update_X()
+    #         print(f'slice {sl} registered')
+            
+            
+            
+            
+            

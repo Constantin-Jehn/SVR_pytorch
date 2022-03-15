@@ -19,8 +19,8 @@ def torch_to_nii(data,affine):
     new_img = nib.Nifti1Image(data,affine)
     return new_img
 
-def save_nifti(nifti_image, filename):
-    path = os.path.join('data', filename + '.nii.gz')
+def save_nifti(nifti_image, folder, filename):
+    path = os.path.join(folder, filename + '.nii.gz')
     nib.save(nifti_image, path)
 
 def show_stack(t_image):
