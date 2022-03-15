@@ -28,5 +28,4 @@ def show_stack(t_image):
     fig, axes = plt.subplots(1, t_image.shape[2])
     for i in range(t_image.shape[2]):
       axes[i].imshow(t.transpose(t_image[:,:,i],1,0), cmap="gray", origin="lower")
-    return 0
       

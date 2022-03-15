@@ -180,3 +180,11 @@ class volume:
                 self.p_r[4,target_index] += PSN_Gauss(distance_vector[:,i])*p_s[4,i]
             self.update_X()
             print(f'slice {sl} registered')
+        
+        
+        
+        
+        
+        
+        
+    
