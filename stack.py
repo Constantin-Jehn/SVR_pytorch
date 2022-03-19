@@ -78,7 +78,7 @@ class stack:
         return F_inv.float()
     
     def create_p_s(self):
-        """Function to create represenation of image in voxel space R^(5xl*l,k) (i,j,0,1,value)"""
+        """Function to create represenation of image in voxel space R^(5,l*l,k) (i,j,0,1,value)"""
         x_lin,y_lin = t.linspace(0,self.I.shape[0]-1,self.I.shape[0]), t.linspace(0,self.I.shape[1]-1,self.I.shape[1])
         x_grid, y_grid = t.meshgrid(x_lin, y_lin)
         coordinates = t.stack((t.flatten(x_grid), t.flatten(y_grid)), dim = 0)
@@ -92,6 +92,14 @@ class stack:
             pixels[4,:,i] = values
         self.p_s = pixels
         return self.p_s
+    
+    def create_I_from_ps(self):
+        """Creating matrices from p_s especially during sampling"""
+        dim_0, dim_1 = int(t.max(self.p_s[0,:,:]).item() + 1), int(t.max(self.p_s[1,:,:]).item() + 1)
+        I = t.zeros(dim_0, dim_1, self.p_s.shape[2])
+        for sl in range(0,I.shape[2]):
+            I[:,:,sl] = self.p_s[4,:,sl].view(dim_0,dim_1)
+        return I 
         
        
     def create_p_r(self):

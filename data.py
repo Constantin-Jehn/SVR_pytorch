@@ -2,11 +2,12 @@ import os
 import nibabel as nib
 import matplotlib.pyplot as plt
 import torch as t
+import dill
 
 
-def nii_to_torch(filename):
+def nii_to_torch(folder, filename):
     """opens nifti file from /data and return data and affine as torch tensors"""
-    path = os.path.join("data", filename)
+    path = os.path.join(folder, filename)
     img = nib.load(path)
     epi_image = t.tensor(img.get_fdata())
     affine = t.tensor(img.affine)
@@ -22,6 +23,15 @@ def torch_to_nii(data,affine):
 def save_nifti(nifti_image, folder, filename):
     path = os.path.join(folder, filename + '.nii.gz')
     nib.save(nifti_image, path)
+    
+def save_target(obj, folder, filename):
+    path = os.path.join(folder, filename)
+    #dest = filename + ".pickle"
+    dill.dump(obj, file = open(path + ".pickle", "wb"))
+
+def open_target(folder,filename):
+    path = os.path.join(folder, filename)
+    return dill.load((open(path + ".pickle","rb")))
 
 def show_stack(t_image):
     """ Function to display row of image slices """

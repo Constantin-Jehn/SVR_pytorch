@@ -9,7 +9,29 @@ import nibabel as nib
 import time
 
 class volume:
-    def __init__(self,geometry, n_voxels):
+    
+    def __init__(self,X=0,affine=t.eye(4)):
+        self.X = X
+        self.affine = affine
+        self.p_r = 0
+        self.p_s = 0
+        self.geometry = 0
+        self.n_voxels = 0
+        
+    # def __init__(self,geometry, n_voxels):
+    #     self.p_r = self.create_voxel_mesh(geometry, n_voxels)
+    #     self.geometry = geometry
+    #     self.n_voxels = n_voxels
+    #     self.X = 0
+    #     self.update_X()
+    #     self.affine = self.create_affine()
+    
+    def from_tensor(self, X, affine):
+        self.X = X
+        self.affine = affine
+        
+    def from_stack(self, geometry, n_voxels):
+        """define volume starting from a stack"""
         self.p_r = self.create_voxel_mesh(geometry, n_voxels)
         self.geometry = geometry
         self.n_voxels = n_voxels
@@ -17,11 +39,14 @@ class volume:
         self.update_X()
         self.affine = self.create_affine()
         
+    # def create_pr_from_tensor(self):
+        
+        
     def create_voxel_mesh(self, geometry,n_voxels):
         """Function to create the voxel mesh. i.e. the target volume X R^(5,l*l)
         Inputs: 
         geometry: [[x_min, x_max],[y_min, y_max],[z_min, z_max]]
-        voxels[n_x, n_y, n_z] numer of voxels in each dimension
+        voxels[n_x, n_y, n_z] number of voxels in each dimension
         """
         #lengths
         [l_x,l_y,l_z] = geometry[:,0] - geometry[:,1]
@@ -37,7 +62,25 @@ class volume:
     def p_s_tilde(self,F):
         """Function returns the "ideal" pixels in in the slice space R(4,n_voxels_total,n_slices_per_stack)"""
         #indexing on p_r because last row contains the intensity value
-        return t.matmul(F.float(),self.p_r[:4,:].float())
+        indices =  t.matmul(F.float(),self.p_r[:4,:].float())
+        p_s_tilde = t.cat((indices, self.p_r[4,:].unsqueeze(0)), dim=0)
+        return p_s_tilde
+    
+    def create_ps_from_X(self):
+        """create a pixel tensor from the volume X"""
+        x_lin,y_lin = t.linspace(0,self.X.shape[0]-1,self.X.shape[0]), t.linspace(0,self.X.shape[1]-1,self.X.shape[1])
+        x_grid, y_grid = t.meshgrid(x_lin, y_lin)
+        coordinates = t.stack((t.flatten(x_grid), t.flatten(y_grid)), dim = 0)
+        add_on = t.tensor([[0],[1],[0]]).repeat(1,coordinates.shape[1])
+        pixels = t.cat((coordinates, add_on),0)
+        pixels = pixels[:,:,None].repeat(1,1,self.X.shape[2])
+        #add values for use during registration later
+        for i in range(0,self.X.shape[2]):
+            data = self.X[:,:,i]
+            values = data.flatten()[None,:]
+            pixels[4,:,i] = values
+        self.p_s = pixels
+        return self.p_s
     
     def update_X(self):
         X_shape  = (self.n_voxels[0].item(), self.n_voxels[1].item(), self.n_voxels[2].item())
@@ -48,7 +91,8 @@ class volume:
         """creates the affine of a volume according to definition of geometry and resolution of voxels"""
         lengths = self.geometry[:,1] - self.geometry[:,0]
         zooms = t.diag(t.div(lengths,self.n_voxels))
-        translations = - self.geometry[:,0]
+        #translations = - self.geometry[:,0]
+        translations = t.zeros(3)
         affine = t.tensor(nib.affines.from_matvec(zooms.numpy(),translations.numpy()))
         self.affine = affine
         return affine
