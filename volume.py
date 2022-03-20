@@ -3,10 +3,11 @@ Module for the structure of volumes and
 variable name mainly follow Fast Volume Reconstruction From Motion Corrupted Stack of 2D slices (Kainz 2015)
 """
 
-import numpy as np
 import torch as t
 import nibabel as nib
 import time
+import PSF
+
 
 class volume:
     
@@ -101,7 +102,6 @@ class volume:
         """Function to register 2d slice to volume"""
         sigmas = [sigma_PSN, sigma_PSN, sigma_PSN]
         for sl in range(0,stack.k):
-            
             if time_it:
                 t2 = time.time()
             
@@ -139,7 +139,6 @@ class volume:
                 #for being inside voxel all distances (in voxel space) must be < 1
                 #get indices that match from voxel to pixel [(voxel_index),(pixel_index)]
                 indices = t.where(t.all(distance_tensor < dist_threshold,2))
-                #indices = t.where(t.norm(distance_tensor,dim=2) < 1.5)
                 #number of matches
                 length = list(indices[0].shape)[0]
                 
@@ -150,7 +149,7 @@ class volume:
                 #extract relevant p_s and calculate PSN vectorized
                 relevant_p_s = p_s[4,indices[1]]
                 relevant_dist = distance_tensor[indices[0],indices[1],:]
-                gauss = PSN_Gauss_vec(relevant_dist, sigmas=sigmas)
+                gauss = PSF.PSF_Gauss_vec(relevant_dist, sigmas=sigmas)
                 value = t.multiply(gauss, relevant_p_s)
                 
                 #add values to corresponding voxels
@@ -164,49 +163,20 @@ class volume:
                     print(f'voxel assignmet: {time.time()-t2} s')
             self.update_X()
             print(f'slice {sl} registered \n ')
-        
-
-def PSN_Gauss(offset,sigmas = [10,10,10]):
-    """Gaussian pointspreadfunction higher sigma --> sharper kernel"""
-    return t.exp(-(offset[0]**2)/sigmas[0]**2 - (offset[1]**2)/sigmas[1]**2 - (offset[2]**2)/sigmas[2]**2).float()
-    
-def PSN_Gauss_vec(offset, sigmas = [10,10,10]):
-    """Vectorized Gaussian point spread function"""
-    return t.exp(-t.div(offset[:,0]**2,sigmas[0]**2) -t.div(offset[:,1]**2,sigmas[2]**2) -t.div(offset[:,2]**2,sigmas[2]**2)).float()
-         
-    # def register_stack_euclid(self, stack):
-    #     """Function to register a stack into the target volume"""
-    #     #iterate over slices in stack
-    #     for sl in range(0,stack.k):
-    #         #tra
-    #         F = stack.F[:,:,sl]
-    #         p_s_tilde = self.p_s_tilde(F)
-    #         p_s = stack.p_s[:,:,sl]
             
-    #         p_s_tilde_t = p_s_tilde.transpose(0,1).float()
-    #         p_s_t = p_s.transpose(0,1).float()
-    #         distance_matrix = t.cdist(p_s_t[:,:4], p_s_tilde_t)
-            
-    #         #closest_ps_tilde = t.min(distance_matrix,1).indices
-    #         #first index p_s_t, second tilde
-    #         indices = t.where(distance_matrix < 2)
-            
-    #         distance_tensor = t.abs(p_s_t[indices[0],:3].unsqueeze(0) - p_s_tilde_t[indices[1],:3].unsqueeze(1))
-
-    #         #extract relevant p_s and calculate PSN vectorized
-    #         relevant_p_s = p_s[4,indices[1]]
-    #         relevant_dist = distance_tensor[indices[0],indices[1],:]
-    #         gauss = PSN_Gauss_vec(relevant_dist)
-    #         value = t.multiply(gauss, relevant_p_s)
-            
-    #         #add values to corresponding voxels
-    #         for voxel in range(0,length):
-    #             self.p_r[4,indices[0][voxel]] += value[voxel]
-            
-    #         distance_vector = t.sub(p_s[:3,:],p_s_tilde[:3,closest_ps_tilde])
-            
-    #         for i in range(0,closest_ps_tilde.shape[0]):
-    #             target_index = closest_ps_tilde[i]
-    #             self.p_r[4,target_index] += PSN_Gauss(distance_vector[:,i])*p_s[4,i]
-    #         self.update_X()
-    #         print(f'slice {sl} registered')
+    def scale_ps_tilde(self, sampling_stack):
+        """Function to scale p_s_tilde properly during sampling R^(5,n_voxels_total,stack.k)"""
+        i,j,k = t.ones(sampling_stack.k)*float("Inf"), t.ones(sampling_stack.k)*float("Inf"), t.ones(sampling_stack.k)*float("Inf")
+        p_s_tilde = t.zeros(5,self.p_r.shape[1],sampling_stack.k)
+        for sl in range(0,sampling_stack.k):
+            F = sampling_stack.F[:,:,sl]
+            p_s_tilde[:,:,sl] = self.p_s_tilde(F)
+            i[sl], j[sl], k[sl] = t.min(p_s_tilde[0,:]), t.min(p_s_tilde[1,:]), t.min(p_s_tilde[2,:])
+        i_min, j_min, k_min = t.min(i), t.min(j), t.min(k)
+        #bring to start from 0
+        p_s_tilde[0,:,:], p_s_tilde[1,:,:], p_s_tilde [2,:,:] =  p_s_tilde[0,:,:] - i_min, p_s_tilde[1,:,:] - j_min, p_s_tilde [2,:,:] - k_min
+        #squish into sampling size
+        i_max, j_max, k_max = t.max(p_s_tilde[0,:,:]), t.max(p_s_tilde[1,:,:]), t.max(p_s_tilde[2,:,:])
+        i_slice, j_slice, k_slice = sampling_stack.I.shape[0], sampling_stack.I.shape[1], 0
+        p_s_tilde[0,:,:], p_s_tilde[1,:,:], p_s_tilde[2,:,:] = p_s_tilde[0,:,:] * (i_slice/i_max), p_s_tilde[1,:,:] * (j_slice/j_max), p_s_tilde[2,:,:] *(k_slice/k_max)
+        return p_s_tilde

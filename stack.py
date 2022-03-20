@@ -3,12 +3,9 @@ Module for the structure of stacks and
 variable name mainly follow Fast Volume Reconstruction From Motion Corrupted Stack of 2D slices (Kainz 2015)
 """
 
-import numpy as np
+
 import torch as t
-import nibabel as nib
-import time
-
-
+import PSF
 class stack:
     """models one stack of images"""
     def __init__(self, I, affine, beta=0.1):
@@ -99,6 +96,7 @@ class stack:
         I = t.zeros(dim_0, dim_1, self.p_s.shape[2])
         for sl in range(0,I.shape[2]):
             I[:,:,sl] = self.p_s[4,:,sl].view(dim_0,dim_1)
+        self.I = I
         return I 
         
        
@@ -131,3 +129,26 @@ class stack:
         corners = t.stack((p_r_min,p_r_max)).transpose(0,1)
         return corners
 
+    def sample_from_volume(self, target_volume, dist_thresholde:float = 1.5):
+        dist_threshold = 1.5
+        #p_s_tilde_X = target_loaded.create_ps_from_X()
+        p_s_tilde_X = target_volume.scale_ps_tilde(self)
+        for sl in range(0,self.k):
+            p_s_tilde_t_complete = p_s_tilde_X[:,:,sl].transpose(0,1).float()
+            p_s = self.p_s[:,:,sl]
+            p_s_t = p_s.transpose(0,1).float()
+            #batchify not to run out of memory
+            distance_tensor = t.abs(p_s_t[:,:3].unsqueeze(0) - p_s_tilde_t_complete[:,:3].unsqueeze(1))
+            indices = t.where(t.all(distance_tensor < dist_threshold,2))
+            length = list(indices[0].shape)[0]
+            relevant_p_r = p_s_tilde_X[4, indices[0], sl]
+            relevant_dist = distance_tensor[indices[0],indices[1],:]
+            gauss = PSF.PSF_Gauss_vec(relevant_dist)
+            value = t.multiply(gauss, relevant_p_r)
+            #add values to corresponding pixesl
+            for voxel in range(0,length):
+                self.p_s[4,indices[1][voxel],sl] += value[voxel]
+            print(f'slice {sl} sampled \n ')
+        self.create_I_from_ps()
+        print('I updated')
+        

@@ -1,6 +1,14 @@
 import torch as t
 from torchvision import transforms
 
+def PSF_Gauss(offset,sigmas = [10,10,10]):
+    """Gaussian pointspreadfunction higher sigma --> sharper kernel"""
+    return t.exp(-(offset[0]**2)/sigmas[0]**2 - (offset[1]**2)/sigmas[1]**2 - (offset[2]**2)/sigmas[2]**2).float()
+    
+def PSF_Gauss_vec(offset, sigmas = [10,10,10]):
+    """Vectorized Gaussian point spread function"""
+    return t.exp(-t.div(offset[:,0]**2,sigmas[0]**2) -t.div(offset[:,1]**2,sigmas[2]**2) -t.div(offset[:,2]**2,sigmas[2]**2)).float()
+
 """Coordinate transforms"""
 def f(t_image, t_affine):
     """Function to map from Voxel coordinates to reference coordinates """
