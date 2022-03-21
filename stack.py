@@ -8,7 +8,7 @@ import torch as t
 import utils
 class stack:
     """models one stack of images"""
-    def __init__(self, I, affine, beta=0.1):
+    def __init__(self, I, affine, add_init_offset = True, beta=0.1):
         #stacked slices R^(l,l,k)
         self.I = I
         self.k = self.I.shape[2]
@@ -25,7 +25,8 @@ class stack:
         #list of unknowm rigid body transformations initalize with identites R^(4,4,k)
         self.T = t.eye(4).unsqueeze(2).repeat(1,1,self.k)
         #add initial translation in z-direction
-        self.T[2,3,:] = t.linspace(0,self.k-1,self.k)
+        if add_init_offset:
+            self.T[2,3,:] = t.linspace(0,self.k-1,self.k)
         #list ofimage to world transformations
         self.W_s = t.eye(4).unsqueeze(2).repeat(1,1,self.k)
         self.F = self.create_F()

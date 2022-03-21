@@ -5,6 +5,8 @@ import torch as t
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 import time
+from torch.utils.data import Dataset, DataLoader
+import reconstruction_model
 
 def basic_reconstruction(resolution):
     filename = "s1_cropped.nii"
@@ -21,6 +23,7 @@ def basic_reconstruction(resolution):
     geometry = corners
     
     #intermediate solution
+    #resolution = 0.5
     n_voxels = t.ceil(t.multiply(t.tensor(t_image_red.shape),resolution))
     n_voxels[n_voxels < t.min(t.tensor(t_image_red.shape))] = t.min(t.tensor(t_image_red.shape)).item()
     n_voxels = n_voxels.int()
@@ -54,15 +57,65 @@ def basic_2d_sampling(axis, rotation, I_x, I_y, I_z):
     #sampling_2d(sampling_stack, target_loaded)
     utils.show_stack(sampling_stack.I)
     #target = volume.volume.from_stack(geometry,n_voxels)
+    
+def check_ncc():
+    folder = 'test_reconstruction'
+    filename = 's1_cropped_complete'
+    volume1 = utils.open_target(folder, filename)
+    volume2 = utils.open_target(folder, filename)
+    ncc = utils.ncc(volume1, volume2)
+    print(f'ncc identical: {ncc}')
+    disturbed = volume2.p_r[4,:] * (1+t.rand(volume2.p_r.shape[1]) *100000)  
+    volume2.p_r[4,:] = disturbed
+    print(f'ncc disturbed: {utils.ncc(volume1, volume2)}')
+    
+def optimize(resolution):
+    #create stack
+    filename = "s1_cropped.nii"
+    folder = "data"
+    t_image, t_affine, zooms = utils.nii_to_torch(folder, filename)
+    t_image_red = t_image[100:150,100:160,:]
+    first_stack = stack.stack(t_image_red,t_affine, add_init_offset=False)
+    geometry = first_stack.corners()
+    #create target volume
+    n_voxels = t.ceil(t.multiply(t.tensor(t_image_red.shape),resolution))
+    n_voxels[n_voxels < t.min(t.tensor(t_image_red.shape))] = t.min(t.tensor(t_image_red.shape)).item()
+    n_voxels = n_voxels.int()
+    #create target volume
+    target = volume.volume()
+    target.from_stack(geometry,n_voxels)
+    
+    model = reconstruction_model.Reconstruction(target,first_stack)
+    optimizer = t.optim.SGD(model.parameters(), lr = 0.01)
+    
+    #t.autograd.set_detect_anomaly(True)
+    for i in range(0,5):
+        target_volume = model()
+        loss = utils.ncc_within_volume(target_volume)
+        optimizer.zero_grad()
+        loss.backward(retain_graph=True)
+        print(f'epoch: {i} ncc: {loss}')
+        optimizer.step()
 
 if __name__ == '__main__':
-    # resolution = 0.8
-    # basic_reconstruction()
+    #resolution = 0.5
+    #basic_reconstruction(resolution)
+    #axis = 'z'
+    #rotation = 45
+    #I_x, I_y, I_z = 150, 130, 6
+    #basic_2d_sampling(axis, rotation, I_x, I_y, I_z)
+    #check ncc
+    # folder = 'test_reconstruction'
+    # filename = 's1_cropped_complete'
+    # volume1 = utils.open_target(folder, filename)
+    # ncc_within = utils.ncc_within_volume(volume1)
+    # print(ncc_within)
     
-    axis = 'z'
-    rotation = 45
-    I_x, I_y, I_z = 150, 130, 6
-    basic_2d_sampling(axis, rotation, I_x, I_y, I_z)
+    # print(utils.create_T([0,0,90],[1,2,0]))
+    resolution = 0.3
+    optimize(resolution)
     
+    
+
     
     

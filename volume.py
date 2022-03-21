@@ -64,8 +64,10 @@ class volume:
     def p_s_tilde(self,F):
         """Function returns the "ideal" pixels in in the slice space R(4,n_voxels_total,n_slices_per_stack)"""
         #indexing on p_r because last row contains the intensity value
-        indices =  t.matmul(F.float(),self.p_r[:4,:].float())
-        p_s_tilde = t.cat((indices, self.p_r[4,:].unsqueeze(0)), dim=0)
+        relevant_pr = self.p_r[:4,:].clone()
+        indices =  t.matmul(F.float(),relevant_pr.float())
+        relevant_pr_2 = self.p_r[4,:].clone()
+        p_s_tilde = t.cat((indices, relevant_pr_2.unsqueeze(0)), dim=0)
         return p_s_tilde
     
     def create_ps_from_X(self):
