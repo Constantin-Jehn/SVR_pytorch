@@ -6,7 +6,7 @@ variable name mainly follow Fast Volume Reconstruction From Motion Corrupted Sta
 import torch as t
 import nibabel as nib
 import time
-import PSF
+import utils
 
 
 class volume:
@@ -39,6 +39,7 @@ class volume:
         self.X = 0
         self.update_X()
         self.affine = self.create_affine()
+        self.p_s = self.create_ps_from_X()
         
     # def create_pr_from_tensor(self):
         
@@ -149,7 +150,7 @@ class volume:
                 #extract relevant p_s and calculate PSN vectorized
                 relevant_p_s = p_s[4,indices[1]]
                 relevant_dist = distance_tensor[indices[0],indices[1],:]
-                gauss = PSF.PSF_Gauss_vec(relevant_dist, sigmas=sigmas)
+                gauss = utils.PSF_Gauss_vec(relevant_dist, sigmas=sigmas)
                 value = t.multiply(gauss, relevant_p_s)
                 
                 #add values to corresponding voxels
@@ -180,3 +181,10 @@ class volume:
         i_slice, j_slice, k_slice = sampling_stack.I.shape[0], sampling_stack.I.shape[1], 0
         p_s_tilde[0,:,:], p_s_tilde[1,:,:], p_s_tilde[2,:,:] = p_s_tilde[0,:,:] * (i_slice/i_max), p_s_tilde[1,:,:] * (j_slice/j_max), p_s_tilde[2,:,:] *(k_slice/k_max)
         return p_s_tilde
+    
+    def corners(self):
+        """Function to get the "corners" of the stack in world coordinates to estimate the target volume size"""
+        p_r_max = t.max(self.p_r[:3,:], dim = 1).values
+        p_r_min = t.min(self.p_r[:3,:], dim = 1).values
+        corners = t.stack((p_r_min,p_r_max)).transpose(0,1)
+        return corners

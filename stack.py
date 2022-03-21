@@ -5,7 +5,7 @@ variable name mainly follow Fast Volume Reconstruction From Motion Corrupted Sta
 
 
 import torch as t
-import PSF
+import utils
 class stack:
     """models one stack of images"""
     def __init__(self, I, affine, beta=0.1):
@@ -143,7 +143,7 @@ class stack:
             length = list(indices[0].shape)[0]
             relevant_p_r = p_s_tilde_X[4, indices[0], sl]
             relevant_dist = distance_tensor[indices[0],indices[1],:]
-            gauss = PSF.PSF_Gauss_vec(relevant_dist)
+            gauss = utils.PSF_Gauss_vec(relevant_dist)
             value = t.multiply(gauss, relevant_p_r)
             #add values to corresponding pixesl
             for voxel in range(0,length):

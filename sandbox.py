@@ -1,8 +1,7 @@
-import data
+import utils
 import stack
 import volume
 import torch as t
-import nibabel as nib
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 import time
@@ -10,11 +9,11 @@ import time
 def basic_reconstruction(resolution):
     filename = "s1_cropped.nii"
     folder = "data"
-    t_image, t_affine, zooms = data.nii_to_torch(folder, filename)
+    t_image, t_affine, zooms = utils.nii_to_torch(folder, filename)
     
     #t_image_red = t_image
     t_image_red = t_image[100:200,100:210,:]
-    data.show_stack(t_image_red)
+    utils.show_stack(t_image_red)
     
     beta = 0.01
     first_stack = stack.stack(t_image_red,t_affine, beta)
@@ -30,16 +29,16 @@ def basic_reconstruction(resolution):
     target.from_stack(geometry,n_voxels)
     target.reconstruct_stack(first_stack, time_it=True, batches = 5)
     #target.register_stack_euclid(first_stack)
-    nft_img = data.torch_to_nii(target.X, target.affine)
+    nft_img = utils.torch_to_nii(target.X, target.affine)
     folder = 'test_reconstruction'
     filename = 's1_smaller'
-    data.save_target(target,folder, filename)
-    data.save_nifti(nft_img,folder, filename)
+    utils.save_target(target,folder, filename)
+    utils.save_nifti(nft_img,folder, filename)
 
 def basic_2d_sampling(axis, rotation, I_x, I_y, I_z):
     filename = "s1_cropped.nii"
     folder = "data"
-    t_image, t_affine, zooms = data.nii_to_torch(folder, filename)
+    t_image, t_affine, zooms = utils.nii_to_torch(folder, filename)
     #init sampling stack with rotation matrix
     I = t.zeros(I_x, I_y, I_z)
     r = R.from_euler(axis,rotation, degrees = True)
@@ -49,11 +48,11 @@ def basic_2d_sampling(axis, rotation, I_x, I_y, I_z):
     #get volume to sample from
     folder = 'test_reconstruction'
     filename = 's1_cropped_complete'
-    target_loaded = data.open_target(folder, filename)
+    target_loaded = utils.open_target(folder, filename)
     
     sampling_stack.sample_from_volume(target_loaded)
     #sampling_2d(sampling_stack, target_loaded)
-    data.show_stack(sampling_stack.I)
+    utils.show_stack(sampling_stack.I)
     #target = volume.volume.from_stack(geometry,n_voxels)
 
 if __name__ == '__main__':
