@@ -125,6 +125,7 @@ class volume:
                 if time_it:
                     t1 = time.time()
                 #create distance tensor (n_voxels, n_pixels, 3) has difference in all three dimensions
+                #print('before distance')
                 distance_tensor = t.abs(p_s_t[:,:3].unsqueeze(0) - p_s_tilde_t[:,:3].unsqueeze(1))
                 
                 if time_it:

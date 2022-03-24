@@ -1,9 +1,11 @@
 import os
+from matplotlib import transforms
 import nibabel as nib
 import matplotlib.pyplot as plt
+from sympy import rotations
 import torch as t
 import dill
-import pytorch3d.transforms as transforms
+from scipy.spatial.transform import Rotation as R
 
 def nii_to_torch(folder, filename):
     """
@@ -133,7 +135,24 @@ def ncc_within_volume(target_volume):
         ncc -= corr_coef[0,1]
     return ncc
 
-def create_T(rotations, translations):
+def rotation_matrix(angles):
+    s = t.sin(angles)
+    c = t.cos(angles)
+    rot_x = t.cat((t.tensor([1,0,0]),
+                  t.tensor([0,c[0],-s[0]]),
+                  t.tensor([0,s[0],c[0]])), dim = 0).reshape(3,3)
+    
+    rot_y = t.cat((t.tensor([c[1],0,s[1]]),
+                  t.tensor([0,1,0]),
+                  t.tensor([-s[1],0,c[1]])),dim = 0).reshape(3,3)
+    
+    rot_z = t.cat((t.tensor([c[2],-s[2],0]),
+                  t.tensor([s[2],c[2],0]),
+                  t.tensor([0,0,1])), dim = 0).reshape(3,3)
+    return t.matmul(t.matmul(rot_z, rot_y),rot_x)
+    
+
+def create_T(rotations, translations, device):
     """
     Parameters
     ----------
@@ -148,8 +167,8 @@ def create_T(rotations, translations):
         DESCRIPTION.
 
     """
-    rotation = transforms.euler_angles_to_matrix(rotations, "XYZ")
-    bottom = t.tensor([0,0,0,1])
+    rotation = rotation_matrix(rotations).to(device)
+    bottom = t.tensor([0,0,0,1]).to(device)
     trans = t.cat((rotation,translations.unsqueeze(1)),dim=1)
     T = t.cat((trans,bottom.unsqueeze(0)),dim = 0)
     return T

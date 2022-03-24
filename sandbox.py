@@ -7,14 +7,15 @@ import numpy as np
 import time
 from torch.utils.data import Dataset, DataLoader
 import reconstruction_model
+from scipy.spatial.transform import Rotation as R
 
 def basic_reconstruction(resolution):
-    filename = "10_3T_nody_002.nii.gz"
-    folder = "sample_data"
+    filename = "s1_cropped.nii"
+    folder = "data"
     t_image, t_affine, zooms = utils.nii_to_torch(folder, filename)
     
     t_image_red = t_image
-    t_image_red = t_image[:,:,:10]
+    t_image_red = t_image[:,:,:]
     utils.show_stack(t_image_red)
     
     beta = 0.01
@@ -30,7 +31,7 @@ def basic_reconstruction(resolution):
     #create target volume
     target = volume.volume()
     target.from_stack(geometry,n_voxels)
-    target.reconstruct_stack(first_stack, time_it=True, batches = 5)
+    target.reconstruct_stack(first_stack, time_it=True, batches = 30)
     #target.register_stack_euclid(first_stack)
     nft_img = utils.torch_to_nii(target.X, target.affine)
     folder = 'test_reconstruction'
@@ -68,12 +69,13 @@ def check_ncc():
     volume2.p_r[4,:] = disturbed
     print(f'ncc disturbed: {utils.ncc(volume1, volume2)}')
     
-def optimize(resolution):
+def optimize(resolution, device):
     #create stack
     filename = "s1_cropped.nii"
     folder = "data"
+    
     t_image, t_affine, zooms = utils.nii_to_torch(folder, filename)
-    t_image_red = t_image[100:150,100:160,:]
+    t_image_red = t_image[100:200,100:180,:]
     first_stack = stack.stack(t_image_red,t_affine, add_init_offset=False)
     geometry = first_stack.corners()
     #create target volume
@@ -84,7 +86,8 @@ def optimize(resolution):
     target = volume.volume()
     target.from_stack(geometry,n_voxels)
     
-    model = reconstruction_model.Reconstruction(target,first_stack)
+    model = reconstruction_model.Reconstruction(target,first_stack, device)
+    model.to(device)
     optimizer = t.optim.SGD(model.parameters(), lr = 0.01)
     
     #t.autograd.set_detect_anomaly(True)
@@ -97,8 +100,8 @@ def optimize(resolution):
         optimizer.step()
 
 if __name__ == '__main__':
-    resolution = 0.3
-    basic_reconstruction(resolution)
+    #resolution = 0.3
+    #basic_reconstruction(resolution)
     # rotation = t.tensor([0,0,45])
     # I_x, I_y, I_z = 150, 130, 6
     # basic_2d_sampling(rotation, I_x, I_y, I_z)
@@ -110,10 +113,11 @@ if __name__ == '__main__':
     # print(ncc_within)
     
     # print(utils.create_T([0,0,90],[1,2,0]))
-    #resolution = 0.3
-    #optimize(resolution)
+    device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
+    resolution = 0.25
+    optimize(resolution, device)
 
-    
+
     
 
     
