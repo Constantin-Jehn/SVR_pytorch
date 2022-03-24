@@ -9,12 +9,12 @@ from torch.utils.data import Dataset, DataLoader
 import reconstruction_model
 
 def basic_reconstruction(resolution):
-    filename = "s1_cropped.nii"
-    folder = "data"
+    filename = "10_3T_nody_002.nii.gz"
+    folder = "sample_data"
     t_image, t_affine, zooms = utils.nii_to_torch(folder, filename)
     
-    #t_image_red = t_image
-    t_image_red = t_image[100:200,100:210,:]
+    t_image_red = t_image
+    t_image_red = t_image[:,:,:10]
     utils.show_stack(t_image_red)
     
     beta = 0.01
@@ -34,19 +34,18 @@ def basic_reconstruction(resolution):
     #target.register_stack_euclid(first_stack)
     nft_img = utils.torch_to_nii(target.X, target.affine)
     folder = 'test_reconstruction'
-    filename = 's1_smaller'
+    filename = 'sample_data'
     utils.save_target(target,folder, filename)
     utils.save_nifti(nft_img,folder, filename)
 
-def basic_2d_sampling(axis, rotation, I_x, I_y, I_z):
+def basic_2d_sampling(rotations, I_x, I_y, I_z):
     filename = "s1_cropped.nii"
     folder = "data"
     t_image, t_affine, zooms = utils.nii_to_torch(folder, filename)
     #init sampling stack with rotation matrix
     I = t.zeros(I_x, I_y, I_z)
-    r = R.from_euler(axis,rotation, degrees = True)
     t_affine = t.eye(4)
-    t_affine[:3,:3] = t.tensor(r.as_matrix())
+    t_affine = utils.create_T(rotations, t.zeros(3))
     sampling_stack = stack.stack(I,t_affine)
     #get volume to sample from
     folder = 'test_reconstruction'
@@ -98,12 +97,11 @@ def optimize(resolution):
         optimizer.step()
 
 if __name__ == '__main__':
-    #resolution = 0.5
-    #basic_reconstruction(resolution)
-    #axis = 'z'
-    #rotation = 45
-    #I_x, I_y, I_z = 150, 130, 6
-    #basic_2d_sampling(axis, rotation, I_x, I_y, I_z)
+    resolution = 0.3
+    basic_reconstruction(resolution)
+    # rotation = t.tensor([0,0,45])
+    # I_x, I_y, I_z = 150, 130, 6
+    # basic_2d_sampling(rotation, I_x, I_y, I_z)
     #check ncc
     # folder = 'test_reconstruction'
     # filename = 's1_cropped_complete'
@@ -112,8 +110,9 @@ if __name__ == '__main__':
     # print(ncc_within)
     
     # print(utils.create_T([0,0,90],[1,2,0]))
-    resolution = 0.3
-    optimize(resolution)
+    #resolution = 0.3
+    #optimize(resolution)
+
     
     
 

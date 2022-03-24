@@ -2,8 +2,6 @@
 Module for the structure of stacks and 
 variable name mainly follow Fast Volume Reconstruction From Motion Corrupted Stack of 2D slices (Kainz 2015)
 """
-
-
 import torch as t
 import utils
 class stack:
@@ -78,7 +76,7 @@ class stack:
     def create_p_s(self):
         """Function to create represenation of image in voxel space R^(5,l*l,k) (i,j,0,1,value)"""
         x_lin,y_lin = t.linspace(0,self.I.shape[0]-1,self.I.shape[0]), t.linspace(0,self.I.shape[1]-1,self.I.shape[1])
-        x_grid, y_grid = t.meshgrid(x_lin, y_lin)
+        x_grid, y_grid = t.meshgrid(x_lin, y_lin, indexing='ij')
         coordinates = t.stack((t.flatten(x_grid), t.flatten(y_grid)), dim = 0)
         add_on = t.tensor([[0],[1],[0]]).repeat(1,coordinates.shape[1])
         pixels = t.cat((coordinates, add_on),0)
@@ -131,19 +129,26 @@ class stack:
         return corners
 
     def sample_from_volume(self, target_volume, dist_thresholde:float = 1.5):
+        #distance threshold
         dist_threshold = 1.5
-        #p_s_tilde_X = target_loaded.create_ps_from_X()
+        #p_s_tilde scaled to image to sample to
         p_s_tilde_X = target_volume.scale_ps_tilde(self)
+        #iterate over slices
         for sl in range(0,self.k):
+            #get p_s_tilde and p_s of current slice and transpose
             p_s_tilde_t_complete = p_s_tilde_X[:,:,sl].transpose(0,1).float()
             p_s = self.p_s[:,:,sl]
             p_s_t = p_s.transpose(0,1).float()
-            #batchify not to run out of memory
+            #calculate distance tensor
             distance_tensor = t.abs(p_s_t[:,:3].unsqueeze(0) - p_s_tilde_t_complete[:,:3].unsqueeze(1))
+            #get indices of close pairs
             indices = t.where(t.all(distance_tensor < dist_threshold,2))
             length = list(indices[0].shape)[0]
+            #get voxel intensities
             relevant_p_r = p_s_tilde_X[4, indices[0], sl]
+            #get the relevant distances
             relevant_dist = distance_tensor[indices[0],indices[1],:]
+            #calc the impact on pixel with PSF 
             gauss = utils.PSF_Gauss_vec(relevant_dist)
             value = t.multiply(gauss, relevant_p_r)
             #add values to corresponding pixesl

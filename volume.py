@@ -19,14 +19,6 @@ class volume:
         self.geometry = 0
         self.n_voxels = 0
         
-    # def __init__(self,geometry, n_voxels):
-    #     self.p_r = self.create_voxel_mesh(geometry, n_voxels)
-    #     self.geometry = geometry
-    #     self.n_voxels = n_voxels
-    #     self.X = 0
-    #     self.update_X()
-    #     self.affine = self.create_affine()
-    
     def from_tensor(self, X, affine):
         self.X = X
         self.affine = affine
