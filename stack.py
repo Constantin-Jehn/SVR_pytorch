@@ -24,7 +24,7 @@ class stack:
         self.T = t.eye(4).unsqueeze(2).repeat(1,1,self.k)
         #add initial translation in z-direction
         if add_init_offset:
-            self.T[2,3,:] = t.linspace(0,self.k-1,self.k)
+            self.T[2,3,:] = t.linspace(0,self.k-1,self.k) 
         #list ofimage to world transformations
         self.W_s = t.eye(4).unsqueeze(2).repeat(1,1,self.k)
         self.F = self.create_F()

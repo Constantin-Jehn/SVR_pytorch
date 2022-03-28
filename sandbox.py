@@ -40,13 +40,14 @@ def basic_reconstruction(resolution):
     utils.save_nifti(nft_img,folder, filename)
 
 def basic_2d_sampling(rotations, I_x, I_y, I_z):
+    device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
     filename = "s1_cropped.nii"
     folder = "data"
     t_image, t_affine, zooms = utils.nii_to_torch(folder, filename)
     #init sampling stack with rotation matrix
     I = t.zeros(I_x, I_y, I_z)
     t_affine = t.eye(4)
-    t_affine = utils.create_T(rotations, t.zeros(3))
+    t_affine = utils.create_T(rotations, t.zeros(3), device)
     sampling_stack = stack.stack(I,t_affine)
     #get volume to sample from
     folder = 'test_reconstruction'
@@ -102,9 +103,9 @@ def optimize(resolution, device):
 if __name__ == '__main__':
     #resolution = 0.3
     #basic_reconstruction(resolution)
-    # rotation = t.tensor([0,0,45])
-    # I_x, I_y, I_z = 150, 130, 6
-    # basic_2d_sampling(rotation, I_x, I_y, I_z)
+    rotation = t.tensor([0,0,np.pi/2])
+    I_x, I_y, I_z = 150, 130, 5
+    basic_2d_sampling(rotation, I_x, I_y, I_z)
     #check ncc
     # folder = 'test_reconstruction'
     # filename = 's1_cropped_complete'
@@ -113,9 +114,9 @@ if __name__ == '__main__':
     # print(ncc_within)
     
     # print(utils.create_T([0,0,90],[1,2,0]))
-    device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-    resolution = 0.25
-    optimize(resolution, device)
+    #device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
+    #resolution = 0.25
+    #optimize(resolution, device)
 
 
     

@@ -164,17 +164,21 @@ class volume:
         """Function to scale p_s_tilde properly during sampling R^(5,n_voxels_total,stack.k)"""
         i,j,k = t.ones(sampling_stack.k)*float("Inf"), t.ones(sampling_stack.k)*float("Inf"), t.ones(sampling_stack.k)*float("Inf")
         p_s_tilde = t.zeros(5,self.p_r.shape[1],sampling_stack.k)
+        stack_corners = sampling_stack.corners()
         for sl in range(0,sampling_stack.k):
             F = sampling_stack.F[:,:,sl]
             p_s_tilde[:,:,sl] = self.p_s_tilde(F)
             i[sl], j[sl], k[sl] = t.min(p_s_tilde[0,:]), t.min(p_s_tilde[1,:]), t.min(p_s_tilde[2,:])
-        i_min, j_min, k_min = t.min(i), t.min(j), t.min(k)
-        #bring to start from 0
-        p_s_tilde[0,:,:], p_s_tilde[1,:,:], p_s_tilde [2,:,:] =  p_s_tilde[0,:,:] - i_min, p_s_tilde[1,:,:] - j_min, p_s_tilde [2,:,:] - k_min
+        i_min, j_min, k_min = t.min(i), t.min(j), stack_corners[2,0]
+        #bring to start from 0 for indices
+        p_s_tilde[0,:,:], p_s_tilde[1,:,:] =  p_s_tilde[0,:,:] - i_min, p_s_tilde[1,:,:] - j_min
+        #p_s_tilde[0,:,:], p_s_tilde[1,:,:], p_s_tilde [2,:,:] =  p_s_tilde[0,:,:] - i_min, p_s_tilde[1,:,:] - j_min, p_s_tilde [2,:,:] - k_min
         #squish into sampling size
-        i_max, j_max, k_max = t.max(p_s_tilde[0,:,:]), t.max(p_s_tilde[1,:,:]), t.max(p_s_tilde[2,:,:])
-        i_slice, j_slice, k_slice = sampling_stack.I.shape[0], sampling_stack.I.shape[1], 0
-        p_s_tilde[0,:,:], p_s_tilde[1,:,:], p_s_tilde[2,:,:] = p_s_tilde[0,:,:] * (i_slice/i_max), p_s_tilde[1,:,:] * (j_slice/j_max), p_s_tilde[2,:,:] *(k_slice/k_max)
+        i_max, j_max, k_max = t.max(p_s_tilde[0,:,:]), t.max(p_s_tilde[1,:,:]), stack_corners[2,1]
+        i_slice, j_slice = sampling_stack.I.shape[0], sampling_stack.I.shape[1],
+        
+        p_s_tilde[0,:,:], p_s_tilde[1,:,:] = p_s_tilde[0,:,:] * (i_slice/i_max), p_s_tilde[1,:,:] * (j_slice/j_max) 
+        #p_s_tilde[0,:,:], p_s_tilde[1,:,:], p_s_tilde[2,:,:] = p_s_tilde[0,:,:] * (i_slice/i_max), p_s_tilde[1,:,:] * (j_slice/j_max), p_s_tilde[2,:,:] *(k_slice/k_max)
         return p_s_tilde
     
     def corners(self):
