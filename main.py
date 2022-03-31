@@ -126,7 +126,6 @@ def optimize():
                     "image_meta_data": ground_meta}
     ground_truth = add_channel(ground_truth)
     
-    
     #resample image to desired pixdim of reconstruction volume
     mode = "bilinear"
     spacing = Spacingd(keys=["image"], pixdim=pixdim, mode=mode)
@@ -141,25 +140,54 @@ def optimize():
     monai_ncc = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=3)
     optimizer = t.optim.SGD(model.parameters(), lr = 0.01)
     
-    
     ground_spatial_dim = ground_truth["image_meta_data"]["spatial_shape"]
+    resample_to_match = monai.transforms.ResampleToMatch(padding_mode="zeros")
     
-    for epoch in range(0,5):
-        target_dict = model(im_slices, target_dict, ground_spatial_dim)
-        #img = target_dict["image"]
-        pred = target_dict["image"]
+    tgt_meta = deepcopy(target_dict["image_meta_dict"])
+    
+    for epoch in range(0,2):
+        model.train()
         optimizer.zero_grad()
-        loss = monai_ncc(pred, ground_truth["image"])
+        #make prediction
+        target_dict = model(im_slices, target_dict, ground_spatial_dim)
+        
+        #bring target into image-shape for resampling
+        target_dict["image"] = t.squeeze(target_dict["image"])
+        target_dict = add_channel(target_dict)
+        #resample for loss
+        target_dict["image"], target_dict["image_meta_dict"] = resample_to_match(target_dict["image"],
+                                                                                 src_meta = tgt_meta,
+                                                                                 dst_meta = ground_meta)
+        #bring target into batch-shape
+        target_dict = add_channel(target_dict)
+        
+        print("target in high res")
+        plt.imshow(t.squeeze(target_dict["image"])[12,:,:].detach().numpy(), cmap="gray")
+        plt.show()
+        #img = target_dict["image"]
+        loss = monai_ncc(target_dict["image"], ground_truth["image"])
         t.autograd.set_detect_anomaly(True)
         loss.backward(retain_graph=True)
+        optimizer.step()
+        #target_dict = spacing(target_dict)
         print(f'Epoch: {epoch} Loss: {loss}')
     
-    return target_dict
+    #bring target into image shape
+    target_dict["image"] = t.squeeze(target_dict["image"])
+    target_dict= add_channel(target_dict)
+    return target_dict, ground_meta
 
 
 if __name__ == '__main__':
     #monai_demo()
-    target_dict = optimize()
+    target_dict, ground_meta = optimize()
+    folder = "test_reconstruction_monai"
+    path = os.path.join(folder)
+    nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=".nii.gz", 
+                                        resample = False, mode = "bilinear", padding_mode = "zeros",
+                                        separate_folder=False)
+    target_dict["image_meta_dict"]["filename_or_obj"] = "opt_reconstr"
+    nifti_saver.save(target_dict["image"], meta_data=target_dict["image_meta_dict"])
 
 
 
