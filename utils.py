@@ -7,6 +7,21 @@ import torch as t
 import dill
 from scipy.spatial.transform import Rotation as R
 
+import monai
+from monai.transforms import (
+    AddChanneld,
+    LoadImage,
+    LoadImaged,
+    Orientationd,
+    Rand3DElasticd,
+    RandAffined,
+    Spacingd,
+    ToTensord
+)
+from copy import deepcopy
+
+import numpy as np
+
 def nii_to_torch(folder, filename):
     """
     opens nifti file from /data and return data and affine as torch tensors
@@ -156,7 +171,7 @@ def create_T(rotations, translations, device):
     """
     Parameters
     ----------
-    rotations : t.tensor (3x3)
+    rotations : t.tensor (1x3)
         convention XYZ
     translations : t.tensor (1x3)
         translations
@@ -174,4 +189,61 @@ def create_T(rotations, translations, device):
     return T
     
 
+
+#create the slices as 3d tensors
+def slices_from_volume(volume_dict):
+    image = volume_dict["image"]
+    im_slices = list()
+    for i in range (0,image.shape[2]):
+        slice_dict = deepcopy(volume_dict)
+        tmp = slice_dict["image"]
+        tmp[:,:,:i,:,:] = 0
+        tmp[:,:,i+1:,:,:] = 0
+        slice_dict["image"] = tmp
+        im_slices.append(slice_dict)
+    return im_slices
+
+
+def create_volume_dict(folder, filename, pixdim):
+    path = os.path.join(folder, filename)
+    # load data
+    target_dicts = [{"image": path}]
+    loader = LoadImaged(keys = ("image"))
+    to_tensor = ToTensord(keys = ("image"))
+    target_dict = loader(target_dicts[0])
+    target_dict = to_tensor(target_dict)
+    add_channel = AddChanneld(keys=["image"])
+    target_dict = add_channel(target_dict)
+    #make first dimension the slices
+    orientation = monai.transforms.Orientationd(keys = ("image"), axcodes="PLI")
+    target_dict = orientation(target_dict)
+    
+    ground_image = target_dict["image"]
+    ground_pixdim = target_dict["image_meta_dict"]["pixdim"]
+    #resample image to desired pixdim
+    mode = "bilinear"
+    spacing = Spacingd(keys=["image"], pixdim=pixdim, mode=mode)
+    target_dict = spacing(target_dict)
+    return target_dict, ground_image, ground_pixdim
+
+def preprocess(target_dict, pixdim):
+    add_channel = AddChanneld(keys=["image"])
+    target_dict = add_channel(target_dict)
+    #make first dimension the slices
+    orientation = monai.transforms.Orientationd(keys = ("image"), axcodes="PLI")
+    target_dict = orientation(target_dict)
+    #resample image to desired pixdim
+    mode = "bilinear"
+    spacing = Spacingd(keys=["image"], pixdim=pixdim, mode=mode)
+    target_dict = spacing(target_dict)
+    return target_dict
+#reconstruct the 3d image as sum of the slices
+def reconstruct_3d_volume(im_slices, target_dict):
+    n_slices = len(im_slices)
+    tmp = t.zeros(im_slices[0]["image"].shape)
+    for i in range(0,n_slices):
+        tmp = tmp + im_slices[i]["image"]
+    #update target_dict
+    target_dict["image"] = tmp
+    return target_dict
         

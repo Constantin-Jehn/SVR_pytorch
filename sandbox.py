@@ -8,6 +8,7 @@ import time
 from torch.utils.data import Dataset, DataLoader
 import reconstruction_model
 from scipy.spatial.transform import Rotation as R
+from copy import deepcopy
 
 def basic_reconstruction(resolution):
     filename = "s1_cropped.nii"
@@ -74,7 +75,6 @@ def optimize(resolution, device):
     #create stack
     filename = "s1_cropped.nii"
     folder = "data"
-    
     t_image, t_affine, zooms = utils.nii_to_torch(folder, filename)
     t_image_red = t_image[100:200,100:180,:]
     first_stack = stack.stack(t_image_red,t_affine, add_init_offset=False)
@@ -103,9 +103,9 @@ def optimize(resolution, device):
 if __name__ == '__main__':
     #resolution = 0.3
     #basic_reconstruction(resolution)
-    rotation = t.tensor([0,0,np.pi/2])
-    I_x, I_y, I_z = 150, 130, 5
-    basic_2d_sampling(rotation, I_x, I_y, I_z)
+    #rotation = t.tensor([0,0,np.pi/2])
+    #I_x, I_y, I_z = 150, 130, 5
+    #basic_2d_sampling(rotation, I_x, I_y, I_z)
     #check ncc
     # folder = 'test_reconstruction'
     # filename = 's1_cropped_complete'
@@ -114,9 +114,9 @@ if __name__ == '__main__':
     # print(ncc_within)
     
     # print(utils.create_T([0,0,90],[1,2,0]))
-    #device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-    #resolution = 0.25
-    #optimize(resolution, device)
+    device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
+    resolution = 0.2
+    optimize(resolution, device)
 
 
     
