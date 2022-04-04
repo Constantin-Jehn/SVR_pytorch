@@ -150,6 +150,18 @@ def ncc_within_volume(target_volume):
         ncc -= corr_coef[0,1]
     return ncc
 
+def preprocess(target_dict, pixdim):
+    add_channel = AddChanneld(keys=["image"])
+    target_dict = add_channel(target_dict)
+    #make first dimension the slices
+    orientation = monai.transforms.Orientationd(keys = ("image"), axcodes="PLI")
+    target_dict = orientation(target_dict)
+    #resample image to desired pixdim
+    mode = "bilinear"
+    spacing = Spacingd(keys=["image"], pixdim=pixdim, mode=mode)
+    target_dict = spacing(target_dict)
+    return target_dict
+
 def rotation_matrix(angles):
     s = t.sin(angles)
     c = t.cos(angles)
@@ -192,6 +204,19 @@ def create_T(rotations, translations, device):
 
 #create the slices as 3d tensors
 def slices_from_volume(volume_dict):
+    """
+    Parameters
+    ----------
+    volume_dict : dictionary
+        loaded nifti file as dictionary
+
+    Returns
+    -------
+    im_slices : list of dictionaries
+        each entry in list is a slice of the volume still represented in 3d 
+        all entries except for the slice are set to zero
+
+    """
     image = volume_dict["image"]
     im_slices = list()
     for i in range (0,image.shape[2]):
@@ -205,6 +230,26 @@ def slices_from_volume(volume_dict):
 
 
 def create_volume_dict(folder, filename, pixdim):
+    """
+    Parameters
+    ----------
+    folder : string
+        
+    filename : string
+        
+    pixdim : list
+        dimensions of voxels
+
+    Returns
+    -------
+    target_dict : dictionary
+        volume representation of nifti
+    ground_image : TYPE
+        DESCRIPTION.
+    ground_pixdim : TYPE
+        DESCRIPTION.
+
+    """
     path = os.path.join(folder, filename)
     # load data
     target_dicts = [{"image": path}]
@@ -218,27 +263,32 @@ def create_volume_dict(folder, filename, pixdim):
     orientation = monai.transforms.Orientationd(keys = ("image"), axcodes="PLI")
     target_dict = orientation(target_dict)
     
-    ground_image = target_dict["image"]
-    ground_pixdim = target_dict["image_meta_dict"]["pixdim"]
+    ground_image = deepcopy(target_dict["image"])
+    ground_pixdim = deepcopy(target_dict["image_meta_dict"]["pixdim"])
     #resample image to desired pixdim
     mode = "bilinear"
     spacing = Spacingd(keys=["image"], pixdim=pixdim, mode=mode)
     target_dict = spacing(target_dict)
     return target_dict, ground_image, ground_pixdim
 
-def preprocess(target_dict, pixdim):
-    add_channel = AddChanneld(keys=["image"])
-    target_dict = add_channel(target_dict)
-    #make first dimension the slices
-    orientation = monai.transforms.Orientationd(keys = ("image"), axcodes="PLI")
-    target_dict = orientation(target_dict)
-    #resample image to desired pixdim
-    mode = "bilinear"
-    spacing = Spacingd(keys=["image"], pixdim=pixdim, mode=mode)
-    target_dict = spacing(target_dict)
-    return target_dict
 #reconstruct the 3d image as sum of the slices
 def reconstruct_3d_volume(im_slices, target_dict):
+    """
+    
+
+    Parameters
+    ----------
+    im_slices : list of dictionaries
+        list of (transformed image slices)
+    target_dict : dictionary
+        volume dictionary to be updated
+
+    Returns
+    -------
+    target_dict : dictionary
+        volume dictionary from current rotated slices
+
+    """
     n_slices = len(im_slices)
     tmp = t.zeros(im_slices[0]["image"].shape)
     for i in range(0,n_slices):
@@ -246,4 +296,121 @@ def reconstruct_3d_volume(im_slices, target_dict):
     #update target_dict
     target_dict["image"] = tmp
     return target_dict
+
+
+def monai_demo():
+    mode = "bilinear"
+    folder = 'sample_data'
+    filename = '10_3T_nody_001.nii.gz'
+    path = os.path.join(folder, filename)
+    pixdim = (3,3,3)
+    
+    target_dicts = [{"image": path}]
+    loader = LoadImaged(keys = ("image"))
+    target_dict = loader(target_dicts[0])
+    
+    to_tensor = ToTensord(keys = ("image"))
+    target_dict = to_tensor(target_dict)
+    #ground_pixdim = target_dict["image_meta_dict"]["pixdim"]
+    
+    add_channel = AddChanneld(keys=["image"])
+    target_dict = add_channel(target_dict)
+    #adds second "channel for batch"
+    #target_dict = add_channel(target_dict)
+    #make first dimension the slices
+    orientation = monai.transforms.Orientationd(keys = ("image"), axcodes="PLI")
+    target_dict = orientation(target_dict)
+    
+    ground_image, ground_meta = deepcopy(target_dict["image"]), deepcopy(target_dict["image_meta_dict"])
+    ground_meta["spatial_shape"] = list(target_dict["image"].shape)[1:]
+    
+    #resample image to desired pixdim
+    mode = "bilinear"
+    spacing = Spacingd(keys=["image"], pixdim=pixdim, mode=mode)
+    target_dict = spacing(target_dict)
+    
+    #target_dict = preprocess(target_dict,pixdim)
+    target_dict = add_channel(target_dict)
+    im_slices = slices_from_volume(target_dict)
+    k = 10
+    
+    im_slice = im_slices[k]["image"]
+    plt.figure("data",(8, 4))
+    plt.subplot(1, 3, 1)
+    plt.title("next slice")
+    plt.imshow(im_slice[0,0,k+1,:,:], cmap="gray")
+    plt.subplot(1, 3, 2)
+    plt.title("initial")
+    plt.imshow(im_slice[0,0,k,:,:], cmap="gray")
+    plt.subplot(1,3,3)
+    plt.title("previous slice")
+    plt.imshow(im_slice[0,0,k-1,:,:], cmap="gray")
+    plt.show()
+    
+    
+    rotations = t.tensor([np.pi/16,0,0])
+    translations = t.tensor([0,0,0])
+    affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear", normalized = True, padding_mode = "border", align_corners=True)
+    affine = create_T(rotations, translations, device="cpu")
+    
+    trans_im_slices = deepcopy(im_slices)
+    im_slices[k]["image"] = affine_layer(im_slices[k]["image"],affine)
+
+    
+    im_slice = im_slices[k]["image"]
+    plt.figure("data",(8, 4))
+    plt.subplot(1, 3, 1)
+    plt.title("next slice")
+    plt.imshow(im_slice[0,0,k+1,:,:], cmap="gray")
+    plt.subplot(1, 3, 2)
+    plt.title("rotated by layer ")
+    plt.imshow(im_slice[0,0,k,:,:], cmap="gray")
+    plt.subplot(1,3,3)
+    plt.title("previous slice")
+    plt.imshow(im_slice[0,0,k-1,:,:], cmap="gray")
+    plt.show()
+    
+    
+    affine_trans = monai.transforms.Affine(affine = affine)
+    #affine_trans = monai.transforms.Affine(rotate_params=rotations.tolist(), translate_params= translations.tolist())
+    trans_im_slices[k]["image"] = t.squeeze(trans_im_slices[k]["image"])
+    trans_im_slices[k] = add_channel(trans_im_slices[k])
+    trans_im_slices[k]["image"], _ = affine_trans(trans_im_slices[k]["image"])
+    
+    trans_im_slice = trans_im_slices[k]["image"]
+    plt.figure("data",(8, 4))
+    plt.subplot(1, 3, 1)
+    plt.title("next slice")
+    plt.imshow(trans_im_slice[0,k+1,:,:], cmap="gray")
+    plt.subplot(1, 3, 2)
+    plt.title("rotated by transform")
+    plt.imshow(trans_im_slice[0,k,:,:], cmap="gray")
+    plt.subplot(1,3,3)
+    plt.title("previous slice")
+    plt.imshow(trans_im_slice[0,k-1,:,:], cmap="gray")
+    plt.show()
+    
+    
+    # spatial_size = (84,288,288)
+    # src_affine = target_dict["image_meta_dict"]["affine"]
+    # img = target_dict["image"]
+    # resample_to_match = monai.transforms.ResampleToMatch(padding_mode="zeros")
+    # resampled_image, resampled_meta = resample_to_match(img,src_meta = target_dict["image_meta_dict"], dst_meta = ground_meta)
+    
+    # k = 12
+    # plt.figure("data",(8, 4))
+    # plt.subplot(1, 2, 1)
+    # plt.title("original_image")
+    # plt.imshow(ground_image[0,k,:,:], cmap="gray")
+    # plt.subplot(1, 2, 2)
+    # plt.title("resampled")
+    # plt.imshow(resampled_image[0,k,:,:], cmap="gray")
+    # plt.show()
+    # #save
+    # folder = "test_reconstruction_monai"
+    # path = os.path.join(folder)
+    
+    # nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=".nii.gz", 
+    #                                     resample = False, mode = mode, padding_mode = "zeros")
+    # nifti_saver.save(target_dict["image"], meta_data=target_dict["image_meta_dict"])
         
