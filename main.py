@@ -22,27 +22,32 @@ from SVR_optimizer import SVR_optimizer
 def optimize():
     folder = 'sample_data'
     filename = '10_3T_nody_001.nii.gz'
-    pixdim = (3,3,3)
-    epochs = 5
+    pixdim = (2,2,2)
+    epochs = 20
     lr = 0.001
     opt_alg = "Adam"
+    loss_fn = "ncc"
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
     
     svr_opt = SVR_optimizer(folder, filename, pixdim, device)
-    target_dict, loss_log = svr_opt.optimize(epochs, lr, loss_fnc =  "ncc", opt_alg = opt_alg)
+    target_dict, loss_log = svr_opt.optimize(epochs, lr, loss_fnc =  loss_fn, opt_alg = opt_alg)
     
+    plot_title = opt_alg + " pix_dim = (" + ','.join(map(str,(pixdim))) + ")" 
     plt.plot(loss_log)
-    plt.title("ncc pix_dim = (3,3,3)")
+    plt.title(plot_title)
     plt.xlabel("epoch")
-    plt.ylabel("loss")
+    plt.ylabel(loss_fn)
+    plt.grid()
     plt.show()
     
     folder = "test_reconstruction_monai"
-    path = os.path.join(folder)
-    nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=".nii.gz", 
+    path = os.path.join(folder,opt_alg)
+    nifti_saver = monai.data.NiftiSaver(output_dir=path, 
                                         resample = False, mode = "bilinear", padding_mode = "zeros",
                                         separate_folder=False)
-    target_dict["image_meta_dict"]["filename_or_obj"] = "001_333_ncc_lr0_01_adam"
+    
+    save_to = filename[:-7] + '_' + ','.join(map(str,(pixdim))) + '_lr' + str(lr).replace('.',',') + '_' + str(epochs)
+    target_dict["image_meta_dict"]["filename_or_obj"] = save_to
     nifti_saver.save(target_dict["image"], meta_data=target_dict["image_meta_dict"])
 
 if __name__ == '__main__':

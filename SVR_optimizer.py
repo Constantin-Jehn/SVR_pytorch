@@ -170,7 +170,7 @@ class SVR_optimizer():
             loss = loss + monai_ncc(target_dict_image[:,:,sl,:,:], ground_truth_image[:,:,sl,:,:])
         return loss
 
-    def mi_loss_function(target_dict_image, ground_truth_image):
+    def mi_loss_function(self, target_dict_image, ground_truth_image):
         monai_mi = monai.losses.GlobalMutualInformationLoss()
         loss = t.zeros(1)
         k = target_dict_image.shape[2]
