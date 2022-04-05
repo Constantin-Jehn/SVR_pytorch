@@ -5,12 +5,12 @@ from monai.transforms import (
     AddChanneld)
 
 class ReconstructionMonai(t.nn.Module):
-    def __init__(self, k, device):
+    def __init__(self, k, device, mode):
         super().__init__()
         self.k = k
         self.rotations = t.nn.Parameter(t.zeros(3,k))
         self.translations = t.nn.Parameter(t.zeros(3,k))
-        self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
+        self.affine_layer = monai.networks.layers.AffineTransform(mode = mode,  normalized = True, padding_mode = "zeros")
         self.device = device
         
     def forward(self, im_slices, target_dict, ground_spatial_dim):

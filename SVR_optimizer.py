@@ -20,11 +20,12 @@ from copy import deepcopy
 
 
 class SVR_optimizer():
-    def __init__(self,folder, filename, pixdim, device):
+    def __init__(self,folder, filename, pixdim, device, mode):
         self.folder = folder
         self.filename = filename
         self.pixdim = pixdim
         self.device = device
+        self.mode = mode
         self.ground_truth, self.im_slices, self.target_dict, self.k = self.preprocess()
 
     
@@ -51,7 +52,7 @@ class SVR_optimizer():
             number of slices
 
         """
-        mode = "bilinear"
+        mode = self.mode
         path = os.path.join(self.folder, self.filename)
         
         add_channel = AddChanneld(keys=["image"])
@@ -105,10 +106,10 @@ class SVR_optimizer():
             containing reconstructed volume
 
         """
-        device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
         add_channel = AddChanneld(keys=["image"])
         
-        model = reconstruction_model.ReconstructionMonai(self.k,self.device)
+        model = reconstruction_model.ReconstructionMonai(self.k,self.device, self.mode)
+        model.to(self.device)
         if opt_alg == "SGD":
             optimizer = t.optim.SGD(model.parameters(), lr = lr)
         elif(opt_alg == "Adam"):

@@ -196,7 +196,7 @@ def create_T(rotations, translations, device):
     """
     rotation = rotation_matrix(rotations).to(device)
     bottom = t.tensor([0,0,0,1]).to(device)
-    trans = t.cat((rotation,translations.unsqueeze(1)),dim=1)
+    trans = t.cat((rotation,translations.unsqueeze(1)),dim=1).to(device)
     T = t.cat((trans,bottom.unsqueeze(0)),dim = 0)
     return T
     
