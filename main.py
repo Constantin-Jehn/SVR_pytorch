@@ -31,10 +31,7 @@ def optimize():
     loss_fn = "ncc"
     mode = "bilinear"
     save_to = filename[:-7] + '_' + ','.join(map(str,(pixdim))) + '_lr' + str(lr).replace('.',',') + '_' + str(epochs) + '_' + mode
-    
-    
-    
-    
+
     svr_opt = SVR_optimizer(folder, filename, pixdim, device, mode)
     target_dict, loss_log = svr_opt.optimize(epochs, lr, loss_fnc =  loss_fn, opt_alg = opt_alg)
     

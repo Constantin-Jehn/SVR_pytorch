@@ -18,7 +18,6 @@ class ReconstructionMonai(t.nn.Module):
         for sl in range(0,self.k):
             affine = utils.create_T(self.rotations[:,sl], self.translations[:,sl], self.device)
             im_slices[sl]["image"] = self.affine_layer(im_slices[sl]["image"], affine)
-        
         target_dict = utils.reconstruct_3d_volume(im_slices, target_dict)
         # print("target in low res")
         # plt.imshow(t.squeeze(target_dict["image"])[12,:,:].detach().numpy(), cmap="gray")

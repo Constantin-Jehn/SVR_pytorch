@@ -209,7 +209,6 @@ def slices_from_volume(volume_dict):
     ----------
     volume_dict : dictionary
         loaded nifti file as dictionary
-
     Returns
     -------
     im_slices : list of dictionaries
@@ -274,20 +273,16 @@ def create_volume_dict(folder, filename, pixdim):
 #reconstruct the 3d image as sum of the slices
 def reconstruct_3d_volume(im_slices, target_dict):
     """
-    
-
     Parameters
     ----------
     im_slices : list of dictionaries
         list of (transformed image slices)
     target_dict : dictionary
         volume dictionary to be updated
-
     Returns
     -------
     target_dict : dictionary
         volume dictionary from current rotated slices
-
     """
     n_slices = len(im_slices)
     tmp = t.zeros(im_slices[0]["image"].shape)

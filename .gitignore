@@ -6,6 +6,7 @@ __pycache__/
 .idea/
 test_reconstruction/
 test_reconstruction_monai/
+cropped_images/
 data/
 
 
