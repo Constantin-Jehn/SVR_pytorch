@@ -13,7 +13,7 @@ class ReconstructionMonai(t.nn.Module):
         self.affine_layer = monai.networks.layers.AffineTransform(mode = mode,  normalized = True, padding_mode = "zeros")
         self.device = device
         
-    def forward(self, im_slices, target_dict, ground_spatial_dim):
+    def forward(self, im_slices, target_dict):
         #transformed_slices = list()
         for sl in range(0,self.k):
             affine = utils.create_T(self.rotations[:,sl], self.translations[:,sl], self.device)
@@ -23,10 +23,32 @@ class ReconstructionMonai(t.nn.Module):
         # plt.imshow(t.squeeze(target_dict["image"])[12,:,:].detach().numpy(), cmap="gray")
         # plt.show()
         return target_dict
+
+class Reconstruction(t.nn.Module):
+    def __init__(self,n_stacks:int,n_slices_max:int, device):
+        super().__init__()
+        self.device = device
+        self.n_stacks = n_stacks
+        self.rotations = t.nn.Parameter(t.zeros(3,n_stacks,n_slices_max))
+        self.translations = t.nn.Parameter(t.zeros(3,n_stacks,n_slices_max))
+        self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
     
-    
-    
-    
+    def forward(self, im_slices):
+        if len(im_slices) != self.n_stacks:
+            assert("slice dimensions does not match pre-defined number of stacks.")
+        for sta in range(0,self.n_stacks):
+            slices = im_slices[sta]
+            n_slices = len(slices)
+            for sli in range(0,n_slices):
+                affine = utils.create_T(self.rotations[:,sta,sli],self.translations[:,sta,sli], self.device)
+                slices[sli] = self.affine_layer(slices[sli], affine)
+            im_slices[sta] = slices
+            
+        return im_slices   
+            
+            
+        
+
     #batched:
     # def forward(self, im_slices, target_dict, ground_spatial_dim):
     #     #transformed_slices = list()

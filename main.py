@@ -52,7 +52,6 @@ def optimize():
                                         resample = False, mode = mode, padding_mode = "zeros",
                                         separate_folder=False)
     
-    
     target_dict["image_meta_dict"]["filename_or_obj"] = save_to
     nifti_saver.save(target_dict["image"], meta_data=target_dict["image_meta_dict"])
 
@@ -67,7 +66,7 @@ if __name__ == '__main__':
     "23_3T_nody_002.nii.gz"]
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     file_world = "world.nii.gz"
-    pixdim = (5.0, 5.0, 5.0)
+    pixdim = (1.0, 1.0, 1.0)
 
     src_folder = "sample_data"
     dst_folder = "cropped_images"
@@ -75,4 +74,5 @@ if __name__ == '__main__':
     dst_folder = "cropped_images"
     
     svr_optimizer = SVR_optimizer(src_folder,dst_folder, filenames, file_mask,pixdim, "cpu", mode = "bilinear")
+    svr_optimizer.optimize_multiple_stacks(1, 0.1)
     #optimize()

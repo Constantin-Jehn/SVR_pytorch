@@ -57,6 +57,9 @@ class SVR_optimizer():
         self.ground_truth = self.load_stacks()
         self.resample_to_pixdim()
         self.stacks = self.load_stacks()
+        #slices is a list: each entry is a list of all slices of one stack
+        self.slices, self.n_slices_max = self.construct_slices()
+        print("prepcessing done")
         #self.ground_truth, self.im_slices, self.target_dict, self.k = self.preprocess()
 
 
@@ -105,6 +108,25 @@ class SVR_optimizer():
         path_dst = os.path.join(self.prep_folder, "world.nii.gz")
         common_image.save(path_dst)
     
+    def resample_to_pixdim(self):
+        """
+        After cropping and having saved the ground truth image, bring the images
+        to desired resolution for reconstruction
+
+        Returns
+        -------
+        None.
+        """
+        resampler = tio.transforms.Resample(self.pixdim)
+        k = len(self.stack_filenames)
+        for i in range(0,k):
+            filename = self.stack_filenames[i]
+            path_stack = os.path.join(self.prep_folder, filename)
+            stack = tio.ScalarImage(path_stack)
+            resampled_stack = resampler(stack)
+            path_dst = os.path.join(self.prep_folder, filename)
+            resampled_stack.save(path_dst)    
+    
     
     def load_stacks(self):
         """
@@ -132,85 +154,114 @@ class SVR_optimizer():
             stack_list.append(stack_dict)
         return stack_list
             
-
-    def resample_to_pixdim(self):
+    def construct_slices(self):
         """
-        After cropping and having saved the ground truth image, bring the images
-        to desired resolution for reconstruction
-
+        from the prepocessed (cropped + corr. resolution) image slices are 
+        created that will be used to perform the rotations/translations on
         Returns
         -------
-        None.
+        slices : list
+            each entry belongs to one image, and contains again a list of all 
+            the slices represented as 3d torch tensor
 
         """
-        resampler = tio.transforms.Resample(self.pixdim)
-        k = len(self.stack_filenames)
-        for i in range(0,k):
-            filename = self.stack_filenames[i]
-            path_stack = os.path.join(self.prep_folder, filename)
-            stack = tio.ScalarImage(path_stack)
-            resampled_stack = resampler(stack)
-            path_dst = os.path.join(self.prep_folder, filename)
-            resampled_stack.save(path_dst)    
+        #slices are used in the reconstruction model where formate (batch,channel, HWD) is necessary
+        add_channel = AddChanneld(keys=["image"])
+        slices = list()
+        k = len(self.stacks)
+        n_slices_max = 0 
+        for st in range(0,k):
+            stack = add_channel(self.stacks[st])
+            stack_image = stack["image"]
+            n_slices = stack_image.shape[-1]
+            if n_slices > n_slices_max: 
+                n_slices_max = n_slices
+            im_slices = list()
+            for i in range (0,n_slices):
+                tmp = deepcopy(stack_image)
+                tmp[:,:,:,:,:i] = 0
+                tmp[:,:,:,:,i+1:] = 0
+                im_slices.append(tmp)
+            slices.append(im_slices)
+        return slices, n_slices_max
     
-    def preprocess(self):
+    
+    def update_local_stacks(self, im_slices):
         """
+        use to update the stacks after transform (which should be optimized)
+        was applied to slices
         Parameters
         ----------
-        folder : string
-            folder of nifti file to be processed
-        filename : string
-            filename of nifti file to be processed
-        pixdim : TYPE
-            DESCRIPTION.
+        im_slices : list 
+            contains all slices
+        Returns
+        -------
+        target_dict : dictionary
+            volume dictionary from current rotated slices
+        """
+        n_stack = len(self.stacks)
+        
+        for sta in range(0,n_stack):
+            n_slices = len(im_slices[sta])
+            tmp = t.zeros(self.stacks[sta]["image"].shape)
+            for sli  in range(0,n_slices):
+                tmp = tmp + im_slices[sta][sli]
+            #update target_dict
+            self.stacks[sta] = tmp
+    
+    
+    def batch_to_image(stacks):
+        """
+        casts stacks from batch format (batch,channel,H,W,D)
+        to image format(channel,H,W,D)
+
+        Parameters
+        ----------
+        stacks : list
+            list of stacks
 
         Returns
         -------
-        ground_truth : dictionary
-            dictionary with the basic image slices as reference for loss function
-        im_slices : list of dictionaries
-            contains all slices represented in 3d space
-        target_dict : dictionary
+        stacks : TYPE
             DESCRIPTION.
-        k : int
-            number of slices
 
         """
-        mode = self.mode
-        path = os.path.join(self.folder, self.filename)
+        k = len(stacks)
+        for i in range(0,k):
+            stacks[i]["image"] = t.squeeze(stacks[i]["image"]).unsqueeze(0)
+        return stacks
         
+    
+    def optimize_multiple_stacks(self, epochs, lr, loss_fnc = "ncc", opt_alg = "Adam"):
         add_channel = AddChanneld(keys=["image"])
-        orientation = monai.transforms.Orientationd(keys = ("image"), axcodes="PLI")
-        spacing = Spacingd(keys=["image"], pixdim=self.pixdim, mode=mode)
-        
-        target_dicts = [{"image": path}]
-        loader = LoadImaged(keys = ("image"))
-        target_dict = loader(target_dicts[0])
-        
-        to_tensor = ToTensord(keys = ("image"))
-        target_dict = to_tensor(target_dict)
-        #ground_pixdim = target_dict["image_meta_dict"]["pixdim"]
-        target_dict = add_channel(target_dict)
-        
-        #make first dimension the slices
-        target_dict = orientation(target_dict)
-        
-        #save initial images for loss function
-        ground_image, ground_meta = deepcopy(target_dict["image"]), deepcopy(target_dict["image_meta_dict"])
-        ground_meta["spatial_shape"] = list(target_dict["image"].shape)[1:]
-        ground_truth = {"image": ground_image,
-                        "image_meta_dict": ground_meta}
-        ground_truth = add_channel(ground_truth)
-        
-        #resample image to desired pixdim of reconstruction volume
-        mode = "bilinear"
-        target_dict = spacing(target_dict)
-        target_dict = add_channel(target_dict)
-        im_slices = utils.slices_from_volume(target_dict)
-        k = len(im_slices)
-        return ground_truth, im_slices, target_dict, k
     
-    
+        n_stacks = len(self.stacks)
+        resampler = list()
+        #create resampler for each stack to make use inverse function later on
+        for i in range(0,n_stacks):
+            resampler.append(monai.transforms.ResampleToMatchd(keys = ["image"], template_key=["image_meta_dict"], padding_mode="zeros"))
+        
+        model = reconstruction_model.Reconstruction(n_stacks=n_stacks, n_slices_max = self.n_slices_max, device = self.device)
+
+        if opt_alg == "SGD":
+            optimizer = t.optim.SGD(model.parameters(), lr = lr)
+        elif(opt_alg == "Adam"):
+            optimizer = t.optim.Adam(model.parameters(), lr = lr)
+        else:
+            assert("Choose SGD or Adam as optimizer")        
+        
+        loss_log = list()
+        
+        for epoch in range(0,epochs):
+            model.train()
+            optimizer.zero_grad()
+            
+            transformed_slices = model(self.slices)
+            
+            self.update_local_stacks(transformed_slices)
+            
+            #todo: loss for multiple
+
     def optimize(self, epochs, lr, loss_fnc = "ncc", opt_alg = "SGD"):
         """
         Parameters
@@ -252,7 +303,7 @@ class SVR_optimizer():
             model.train()
             optimizer.zero_grad()
             #make prediction
-            self.target_dict = model(self.im_slices, self.target_dict, ground_spatial_dim)
+            self.target_dict = model(self.im_slices, self.target_dict)
             
             #bring target into image-shape for resampling
             self.target_dict["image"] = t.squeeze(self.target_dict["image"])

@@ -22,54 +22,7 @@ from copy import deepcopy
 
 import numpy as np
 
-def nii_to_torch(folder, filename):
-    """
-    opens nifti file from /data and return data and affine as torch tensors
-    """
-    path = os.path.join(folder, filename)
-    img = nib.load(path)
-    epi_image = t.tensor(img.get_fdata())
-    affine = t.tensor(img.affine)
-    zooms = t.tensor(img.header.get_zooms())
-    return epi_image, affine, zooms
 
-def torch_to_nii(data,affine):
-    """
-    Parameters
-    ----------
-    data : t.tensor
-        tensor of the 3D volume.
-    affine : t.tensor (4x4)
-        corresponding affine
-
-    Returns
-    -------
-    new_img : nifti_img
-
-    """
-    data = data.numpy()
-    affine = affine.numpy()
-    new_img = nib.Nifti1Image(data,affine)
-    return new_img
-
-def save_nifti(nifti_image, folder, filename):
-    """
-    Parameters
-    ----------
-    nifti_image : 
-        image to save
-    folder : string
-        
-    filename : string
-
-    Returns
-    -------
-    None.
-
-    """
-    path = os.path.join(folder, filename + '.nii.gz')
-    nib.save(nifti_image, path)
-    
 def save_target(obj, folder, filename):
     """
     Parameters
@@ -130,15 +83,6 @@ def PSF_Gauss_vec(offset, sigmas = [10,10,10]):
     """
     return t.exp(-t.div(offset[:,0]**2,sigmas[0]**2) -t.div(offset[:,1]**2,sigmas[2]**2) -t.div(offset[:,2]**2,sigmas[2]**2)).float()
 
-def ncc(X,X_prime):
-    """
-    Function to calculate normalize cross-correlation, variables according to Hill 2000
-    input X: reference image, X_prime transformed image
-    """
-    f_x0, g_x0 = X.p_r[4,:].unsqueeze(0), X_prime.p_r[4,:].unsqueeze(0)
-    corr_coef = t.corrcoef(t.cat((f_x0,g_x0), dim = 0))
-    ncc = corr_coef[0,1] 
-    return ncc
     
 def ncc_within_volume(target_volume):
     k = target_volume.X.shape[2]
@@ -149,18 +93,6 @@ def ncc_within_volume(target_volume):
         #make negative for loss
         ncc -= corr_coef[0,1]
     return ncc
-
-def preprocess(target_dict, pixdim):
-    add_channel = AddChanneld(keys=["image"])
-    target_dict = add_channel(target_dict)
-    #make first dimension the slices
-    orientation = monai.transforms.Orientationd(keys = ("image"), axcodes="PLI")
-    target_dict = orientation(target_dict)
-    #resample image to desired pixdim
-    mode = "bilinear"
-    spacing = Spacingd(keys=["image"], pixdim=pixdim, mode=mode)
-    target_dict = spacing(target_dict)
-    return target_dict
 
 def rotation_matrix(angles):
     s = t.sin(angles)
@@ -200,8 +132,6 @@ def create_T(rotations, translations, device):
     T = t.cat((trans,bottom.unsqueeze(0)),dim = 0)
     return T
     
-
-
 #create the slices as 3d tensors
 def slices_from_volume(volume_dict):
     """
@@ -384,28 +314,5 @@ def monai_demo():
     plt.title("previous slice")
     plt.imshow(trans_im_slice[0,k-1,:,:], cmap="gray")
     plt.show()
-    
-    
-    # spatial_size = (84,288,288)
-    # src_affine = target_dict["image_meta_dict"]["affine"]
-    # img = target_dict["image"]
-    # resample_to_match = monai.transforms.ResampleToMatch(padding_mode="zeros")
-    # resampled_image, resampled_meta = resample_to_match(img,src_meta = target_dict["image_meta_dict"], dst_meta = ground_meta)
-    
-    # k = 12
-    # plt.figure("data",(8, 4))
-    # plt.subplot(1, 2, 1)
-    # plt.title("original_image")
-    # plt.imshow(ground_image[0,k,:,:], cmap="gray")
-    # plt.subplot(1, 2, 2)
-    # plt.title("resampled")
-    # plt.imshow(resampled_image[0,k,:,:], cmap="gray")
-    # plt.show()
-    # #save
-    # folder = "test_reconstruction_monai"
-    # path = os.path.join(folder)
-    
-    # nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=".nii.gz", 
-    #                                     resample = False, mode = mode, padding_mode = "zeros")
-    # nifti_saver.save(target_dict["image"], meta_data=target_dict["image_meta_dict"])
+
         
