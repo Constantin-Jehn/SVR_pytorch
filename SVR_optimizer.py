@@ -1,4 +1,4 @@
-import matplotlib.pyplot as plt
+import torchio as tio
 import monai
 from monai.transforms import (
     AddChanneld,
@@ -20,14 +20,138 @@ from copy import deepcopy
 
 
 class SVR_optimizer():
-    def __init__(self,folder, filename, pixdim, device, mode):
-        self.folder = folder
-        self.filename = filename
+    def __init__(self,src_folder, prep_folder, stack_filenames, mask_filename, pixdim, device, mode):
+        """
+        constructer of SVR_optimizer class
+        Parameters
+        ----------
+        src_folder : string
+            initial nifti_files
+        prep_folder : string
+            folder to save prepocessed files
+        stack_filenames : list
+            of filenames of stacks to be reconstructed
+        mask_filename : string
+            nifti filename to crop input images
+        pixdim : list
+            DESCRIPTION.
+        device : TYPE
+            DESCRIPTION.
+        mode : string
+            interpolation mode
+
+        Returns
+        -------
+        None.
+
+        """
+        self.src_folder = src_folder
+        self.prep_folder = prep_folder
+        self.stack_filenames = stack_filenames
+        self.mask_filename = mask_filename
         self.pixdim = pixdim
         self.device = device
         self.mode = mode
-        self.ground_truth, self.im_slices, self.target_dict, self.k = self.preprocess()
+        
+        self.crop_images()
+        self.ground_truth = self.load_stacks()
+        self.resample_to_pixdim()
+        self.stacks = self.load_stacks()
+        #self.ground_truth, self.im_slices, self.target_dict, self.k = self.preprocess()
 
+
+    def crop_images(self):
+        """
+        Parameters
+        ----------
+        src_folder : string
+            folder of images to be cropped
+        filenames : string
+            stacks that should be cropped
+        mask_filename : string
+            mask for cropping
+        dst_folder : string
+            folder to save cropped files
+
+        Returns
+        -------
+        None.
+        """
+        path_mask = os.path.join(self.src_folder, self.mask_filename)
+        mask = tio.LabelMap(path_mask)
+        path_dst = os.path.join(self.prep_folder, self.mask_filename)
+        mask.save(path_dst)
+        k = len(self.stack_filenames)
+        for i in range(0,k):
+            filename = self.stack_filenames[i]
+            path_stack = os.path.join(self.src_folder, filename)
+            stack = tio.ScalarImage(path_stack)
+            resampler = tio.transforms.Resample(stack)
+            resampled_mask = resampler(deepcopy(mask))
+            subject = tio.Subject(stack = stack, mask = resampled_mask)
+            
+            masked_indices_1 = t.nonzero(subject.mask.data)
+            min_indices = np.array([t.min(masked_indices_1[:,1]).item(), t.min(masked_indices_1[:,2]).item(),t.min(masked_indices_1[:,3]).item()])
+            max_indices = np.array([t.max(masked_indices_1[:,1]).item(), t.max(masked_indices_1[:,2]).item(),t.max(masked_indices_1[:,3]).item()])
+            roi_size = (max_indices - min_indices) 
+            
+            cropper = tio.CropOrPad(list(roi_size),mask_name= 'mask')
+            
+            cropped_stack = cropper(subject)
+            path_dst = os.path.join(self.prep_folder, filename)
+            cropped_stack.stack.save(path_dst)
+        #create a common place for the reconstruction
+        common_image = tio.Image(tensor = t.zeros((1,100,100,100)))
+        path_dst = os.path.join(self.prep_folder, "world.nii.gz")
+        common_image.save(path_dst)
+    
+    
+    def load_stacks(self):
+        """
+        After cropping the initial images in low resolution are saved in their original coordinates
+        for the loss computation
+        Returns
+        -------
+        ground_truth : list
+            list of dictionaries containing the ground truths
+
+        """
+        add_channel = AddChanneld(keys=["image"])
+        loader = LoadImaged(keys = ["image"])
+        to_tensor = ToTensord(keys = ["image"])
+        k = len(self.stack_filenames)
+        stack_list = list()
+        for i in range(0,k):
+            path = os.path.join(self.prep_folder, self.stack_filenames[i])
+            stack_dict = {"image": path}
+            stack_dict = loader(stack_dict)
+            stack_dict = to_tensor(stack_dict)
+            stack_dict = add_channel(stack_dict)
+            #keep meta data correct
+            stack_dict["image_meta_dict"]["spatial_shape"] = np.array(list(stack_dict["image"].shape)[1:])
+            stack_list.append(stack_dict)
+        return stack_list
+            
+
+    def resample_to_pixdim(self):
+        """
+        After cropping and having saved the ground truth image, bring the images
+        to desired resolution for reconstruction
+
+        Returns
+        -------
+        None.
+
+        """
+        resampler = tio.transforms.Resample(self.pixdim)
+        k = len(self.stack_filenames)
+        for i in range(0,k):
+            filename = self.stack_filenames[i]
+            path_stack = os.path.join(self.prep_folder, filename)
+            stack = tio.ScalarImage(path_stack)
+            resampled_stack = resampler(stack)
+            path_dst = os.path.join(self.prep_folder, filename)
+            resampled_stack.save(path_dst)    
     
     def preprocess(self):
         """
