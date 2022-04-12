@@ -54,29 +54,26 @@ class SVR_optimizer():
         self.device = device
         self.mode = mode
         
-        self.crop_images()
-
-        self.ground_truth = self.load_stacks()
-        #self.resample_to_pixdim()
+        self.crop_images(upsampling=True)
         self.stacks = self.load_stacks()
-        
-        
-        self.resample_to_hr()
-        self.resample_to_common_coord()
+        #self.resample_to_common_coord()
         self.fixed_image = self.create_common_volume()
         add_channel = AddChanneld(keys=["image"])
         self.fixed_image = add_channel(self.fixed_image)
+        print("fixed_image_generated")
         
+        self.crop_images()
+        self.ground_truth = self.load_stacks()
+        #self.resample_to_pixdim()
         self.stacks = self.load_stacks()
-        
-        
+
         #slices is a list: each entry is a list of all slices of one stack
         self.slices, self.n_slices_max = self.construct_slices()
         print("preprocessing done")
         #self.ground_truth, self.im_slices, self.target_dict, self.k = self.preprocess()
 
 
-    def crop_images(self):
+    def crop_images(self, upsampling = False):
         """
         Parameters
         ----------
@@ -114,6 +111,17 @@ class SVR_optimizer():
             cropper = tio.CropOrPad(list(roi_size),mask_name= 'mask')
             
             cropped_stack = cropper(subject)
+            
+            if upsampling:
+                if i > 0 :
+                    path_stack = os.path.join(self.prep_folder, self.stack_filenames[0])
+                    resampler = tio.transforms.Resample(path_stack)
+                upsampler = tio.transforms.Resample(self.pixdim)
+                
+                if i > 0:
+                    cropped_stack = resampler(subject)
+                cropped_stack = upsampler(cropped_stack)
+            
             path_dst = os.path.join(self.prep_folder, filename)
             cropped_stack.stack.save(path_dst)
         #create a common place for the reconstruction
@@ -420,9 +428,7 @@ class SVR_optimizer():
                 self.resample_to_common_coord(n_stack=st, to_fixed=True)
                 
                 self.stacks[st] = add_channel(self.stacks[st])
-                
-                
-                
+
                 #self.resample_to_common_coord(n_stack = st)
                 
                 loss = self.ncc_loss_function(n_stack = st)
