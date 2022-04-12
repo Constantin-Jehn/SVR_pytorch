@@ -57,16 +57,16 @@ def optimize():
 
 if __name__ == '__main__':
     filenames = ["10_3T_nody_001.nii.gz",
-    "10_3T_nody_002.nii.gz",
-    "14_3T_nody_001.nii.gz",
-    "14_3T_nody_002.nii.gz",
-    "21_3T_nody_001.nii.gz",
-    "21_3T_nody_002.nii.gz",
-    "23_3T_nody_001.nii.gz",
-    "23_3T_nody_002.nii.gz"]
+"10_3T_nody_002.nii.gz",
+"14_3T_nody_001.nii.gz",
+"14_3T_nody_002.nii.gz",
+"21_3T_nody_001.nii.gz",
+"21_3T_nody_002.nii.gz",
+"23_3T_nody_001.nii.gz",
+"23_3T_nody_002.nii.gz"]
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     file_world = "world.nii.gz"
-    pixdim = (1.0, 1.0, 1.0)
+    pixdim = (0.5,0.5,0.5)
 
     src_folder = "sample_data"
     dst_folder = "cropped_images"
@@ -74,5 +74,25 @@ if __name__ == '__main__':
     dst_folder = "cropped_images"
     
     svr_optimizer = SVR_optimizer(src_folder,dst_folder, filenames, file_mask,pixdim, "cpu", mode = "bilinear")
-    svr_optimizer.optimize_multiple_stacks(1, 0.1)
+    
+    world_stack = svr_optimizer.optimize_multiple_stacks(3, 0.001)
+    
+    fixed_image = svr_optimizer.fixed_image
+    fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
+    
+    folder = "test_reconstruction_monai"
+    folder2 = "stacks"
+    path = os.path.join(folder,folder2)
+    
+    mode = "bilinear"
+    nifti_saver = monai.data.NiftiSaver(output_dir=path, 
+                                        resample = False, mode = mode, padding_mode = "zeros",
+                                        separate_folder=False)
+    
+    world_stack["image_meta_dict"]["filename_or_obj"] = "reconstruction_world_stack_all_Adam_0.001.nii.gz"
+    fixed_image["image_meta_dict"]["filename_or_obj"] = "reconstruction_fixed_image.nii.gz"
+    
+    
+    nifti_saver.save(world_stack["image"], meta_data=world_stack["image_meta_dict"])
+    nifti_saver.save(fixed_image["image"], meta_data=fixed_image["image_meta_dict"])
     #optimize()
