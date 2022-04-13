@@ -12,7 +12,6 @@ from monai.transforms import (
     RandAffine
 )
 import os
-import utils
 import numpy as np
 import reconstruction_model
 import torch as t
@@ -229,60 +228,7 @@ class SVR_optimizer():
             tmp = tmp + im_slices[sli]
         #update target_dict
         self.ground_truth[n_stack]["image"] = tmp
-    
-    
-    def batch_to_image(self, stacks):
-        """
-        casts stacks from batch format (batch,channel,H,W,D)
-        to image format(channel,H,W,D)
-
-        Parameters
-        ----------
-        stacks : list
-            list of stacks
-
-        Returns
-        -------
-        stacks : TYPE
-            DESCRIPTION.
-
-        """
-        
-        for i in range(0,self.k):
-            stacks[i]["image"] = t.squeeze(stacks[i]["image"]).unsqueeze(0)
-        return stacks
-    
-    
-    def resample_to_hr(self, n_stack:int = -1):
-        """
-        Resamples stacks to high resolution
-
-        Parameters
-        ----------
-        n_stack : TYPE, optional, int
-           if it is set > 0 only the indexed stack is updated
-
-        Returns
-        -------
-        None.
-
-        """
-        
-        spacing_d = monai.transforms.Spacing(pixdim = self.pixdim, 
-                                            padding_mode= "zeros")
-        if n_stack < 0: 
-            for st in range(0,self.k):
-                self.stacks[st]["image"], self.stacks[st]["image_meta_dict"]["original_affine"],  self.stacks[st]["image_meta_dict"]["affine"] =  spacing_d(self.stacks[n_stack]["image"], affine = self.stacks[st]["image_meta_dict"]["affine"])
-                #keep importan meta data up-todate
-                self.stacks[st]["image_meta_dict"]["pixdim"][1:4] = np.array(self.pixdim)
-                self.stacks[st]["image_meta_dict"]["spatial_shape"] = np.array(list(self.stacks[st]["image"].shape[1:]))
-        else:
-            self.stacks[n_stack]["image"], self.stacks[n_stack]["image_meta_dict"]["original_affine"],  self.stacks[n_stack]["image_meta_dict"]["affine"] =  spacing_d(self.stacks[n_stack]["image"], affine = self.stacks[n_stack]["image_meta_dict"]["affine"])
-            #keep importan meta data up-todate
-            self.stacks[n_stack]["image_meta_dict"]["pixdim"][1:4] = np.array(self.pixdim)
-            self.stacks[n_stack]["image_meta_dict"]["spatial_shape"] = np.array(list(self.stacks[n_stack]["image"].shape[1:]))
                 
-        
 
     def resample_to_common_coord(self, n_stack = - 1, to_fixed = False):
         """
@@ -355,8 +301,6 @@ class SVR_optimizer():
         """
         Combine updated local stacks that are in common coordinate system, to 
         one superpositioned volume
-        
-
 
         Returns
         -------
@@ -371,15 +315,8 @@ class SVR_optimizer():
         world_stack = {"image":tmp, "image_meta_dict": self.stacks[0]["image_meta_dict"]}
         return world_stack
     
-    
-    def resample_world_to_ground_coords(self, world_stack):
-        resampler = monai.transforms.ResampleToMatch()
-        for st in range(0,self.k):
-            self.stacks[st]["image"], self.stacks[st]["image_meta_dict"] = resampler(world_stack["image"],src_meta = world_stack["image_meta_dict"], 
-                                                                                          dst_meta = self.ground_truth[st]["image_meta_dict"],
-                                                                                          padding_mode = "zeros")
         
-    def ncc_loss_function(self, n_stack = -1):
+    def loss_function(self,n_stack, loss = "ncc"):
         """
         Calculate ncc loss as sum from all stacks or only from a single stack.
         Stacks are here resamples into their initial cooridinates and resolution.
@@ -387,17 +324,20 @@ class SVR_optimizer():
         Parameters:
         -------
         n_stack: int
-            if > -1: loss is only calculated for one the stack of that index
+            index to calculate loss of
         
         Returns
         -------
         loss : t.tensor
             the loss
-            
-
         """
-        
-        monai_ncc = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=5)
+        if loss == "ncc":
+            monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=5)
+        elif loss == "mi":
+            monai_loss = monai.losses.GlobalMutualInformationLoss()
+        else:
+            assert("Please choose a valid loss function: either ncc or mi")
+                
         
         stack = self.stacks[n_stack]
         #onl resample image keep local meta_data in-tact
@@ -406,20 +346,34 @@ class SVR_optimizer():
         
         loss = t.zeros(1)
         for sl in range(0,n_slices):
-            loss = loss + monai_ncc(stack_image[:,:,:,:,sl], fixed_image_image[:,:,:,:,sl])
+            loss = loss + monai_loss(stack_image[:,:,:,:,sl], fixed_image_image[:,:,:,:,sl])
         return loss
     
     
-    def optimize_multiple_stacks(self, epochs, lr, loss_fnc = "ncc", opt_alg = "Adam"):
+    def optimize_multiple_stacks(self, epochs:int, lr, loss_fnc = "ncc", opt_alg = "Adam"):
+        """
+        Parameters
+        ----------
+        epochs : integer
+            epochs of 2D/3D registration per stack
+        lr : float
+            optimization hyperparameter
+        loss_fnc : string, optional
+             The default is "ncc".
+        opt_alg : string, optional
+            DESCRIPTION. The default is "Adam".
+
+        Returns
+        -------
+        world_stack : dict
+            reconstruncted volume
+        loss_log : list
+            list of losses
+
+        """
         add_channel = AddChanneld(keys=["image"])
-    
-        n_stacks = len(self.stacks)
-        # resamplers = list()
-        # #create resampler for each stack to make use inverse function later on
-        # for i in range(0,n_stacks):
-        #     resamplers.append(monai.transforms.ResampleToMatch())
-        
         models = list()
+        #create model for each stack 
         for st in range (0,self.k):
             n_slices = len(self.slices[st])
             models.append(reconstruction_model.Reconstruction(n_slices = n_slices, device = self.device))
@@ -427,6 +381,7 @@ class SVR_optimizer():
         loss_log = list()
         
         for st in range(0,self.k):
+            loss_stack = list()
             print(f"\n  stack: {st}")
             model = models[st]
             slices_tmp = self.slices[st]
@@ -446,128 +401,39 @@ class SVR_optimizer():
                 
                 self.ground_truth[st] = add_channel(self.ground_truth[st])
                 
-                #only changes image
+                #only changes image in "ground truth"
                 self.update_local_stack(transformed_slices, n_stack = st)
                 
                 #batch to image
                 self.ground_truth[st]["image"] = t.squeeze(self.ground_truth[st]["image"]).unsqueeze(0)
                 
-                #self.resample_to_hr(n_stack = st)
-                
+                #brings changes to "stacks"
                 self.resample_to_fixed_image(n_stack=st)
                 
                 self.stacks[st] = add_channel(self.stacks[st])
 
-                #self.resample_to_common_coord(n_stack = st)
+                #caculates loss based on "stacks[st]" and fixed_image
+                loss = self.loss_function(n_stack = st, loss = loss_fnc)
                 
-                loss = self.ncc_loss_function(n_stack = st)
+                loss_stack.append(loss.item())
                 #here stack[st] is in coordinates of fixed image
                 print(f'Epoch: {epoch} loss: {loss.item()}')
                 
                 loss.backward(retain_graph=True)
                 
                 optimizer.step()
-            # get last update 
-            #self.update_local_stack(transformed_slices, n_stack = st)
-            self.stacks[st]["image"] = t.squeeze(self.stacks[st]["image"]).unsqueeze(0)
-            
-        #self.resample_to_common_coord(to_fixed=True)    
-        world_stack = self.create_common_volume()
-              
-        return world_stack
-            #todo: loss for multiple
-
-    def optimize(self, epochs, lr, loss_fnc = "ncc", opt_alg = "SGD"):
-        """
-        Parameters
-        ----------
-        ground_truth : dictionary
-            contains initial images and meta_data
-        im_slices : list
-            contains all slices as dictionaries containing 3d representation and meta data
-        target_dict : dictionary
-            DESCRIPTION.
-        k : TYPE
-            DESCRIPTION.
-
-        Returns
-        -------
-        target_dict : dictionary
-            containing reconstructed volume
-
-        """
-        add_channel = AddChanneld(keys=["image"])
-        
-        model = reconstruction_model.ReconstructionMonai(self.k,self.device, self.mode)
-        model.to(self.device)
-        if opt_alg == "SGD":
-            optimizer = t.optim.SGD(model.parameters(), lr = lr)
-        elif(opt_alg == "Adam"):
-            optimizer = t.optim.Adam(model.parameters(), lr = lr)
-        else:
-            assert("Choose SGD or Adam as optimizer")
-        
-        ground_spatial_dim = self.ground_truth["image_meta_dict"]["spatial_shape"]
-        resample_to_match = monai.transforms.ResampleToMatch(padding_mode="zeros")
-        
-        tgt_meta = deepcopy(self.target_dict["image_meta_dict"])
-        ground_meta = self.ground_truth["image_meta_dict"]
-        
-        loss_log = list()
-        for epoch in range(0,epochs):
-            model.train()
-            optimizer.zero_grad()
-            #make prediction
-            self.target_dict = model(self.im_slices, self.target_dict)
-            
-            #bring target into image-shape for resampling
-            self.target_dict["image"] = t.squeeze(self.target_dict["image"])
-            self.target_dict = add_channel(self.target_dict)
-            #resample for loss
-            self.target_dict["image"], self.target_dict["image_meta_dict"] = resample_to_match(self.target_dict["image"],
-                                                                                     src_meta = tgt_meta,
-                                                                                     dst_meta = ground_meta)
-            #bring target into batch-shape
-            self.target_dict = add_channel(self.target_dict)
-            
-            if(loss_fnc == "ncc"):
-                loss = self.ncc_loss_function(self.target_dict["image"], self.ground_truth["image"])
-                
-            elif(loss_fnc == "mi"):
-                loss = self.mi_loss_function(self.target_dict["image"], self.ground_truth["image"])
-            else:
-                assert("Loss function must be either ncc or mi")
-            #loss = bending_loss_fucntion(target_dict["image"])
-            
-            loss_log.append(loss.item())
-            t.autograd.set_detect_anomaly(True)
-            loss.backward(retain_graph=True)
-            optimizer.step()
-            print(f'Epoch: {epoch} Loss: {loss}')
+            # save loss
+            loss_log.append(loss_stack)
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     print (f'parameter {name} has value not equal to zero: {t.all(param.data == 0)}')
-        #bring target into image shape
-        self.target_dict["image"] = t.squeeze(self.target_dict["image"])
-        self.target_dict= add_channel(self.target_dict)
-        return self.target_dict, loss_log
-    
-    def ncc_loss_function_single_stack(self, stack_image, ground_truth_image):
-        monai_ncc = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=5)
-        loss = t.zeros(1)
-        k = stack_image.shape[-1]
-        for sl in range(0,k):
-            ##TTEST minus instead of  plus
-            loss = loss + monai_ncc(stack_image[:,:,:,:,sl], ground_truth_image[:,:,:,:,sl])
-        return loss
+            
+            self.stacks[st]["image"] = t.squeeze(self.stacks[st]["image"]).unsqueeze(0)
+                
+        world_stack = self.create_common_volume()
+              
+        return world_stack, loss_log
 
-    def mi_loss_function_single_stack(self, target_dict_image, ground_truth_image):
-        monai_mi = monai.losses.GlobalMutualInformationLoss()
-        loss = t.zeros(1)
-        k = target_dict_image.shape[2]
-        for sl in range(0,k):
-            loss = loss + monai_mi(target_dict_image[:,:,:,:,sl], ground_truth_image[:,:,:,:,sl])
-        return loss
 
     def bending_loss_fucntion_single_stack(target_dict_image):
         monai_bending = monai.losses.BendingEnergyLoss()

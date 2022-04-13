@@ -1,28 +1,5 @@
 import torch as t
-import utils
 import monai
-from monai.transforms import (
-    AddChanneld)
-
-class ReconstructionMonai(t.nn.Module):
-    def __init__(self, k, device, mode):
-        super().__init__()
-        self.k = k
-        self.rotations = t.nn.Parameter(t.zeros(3,k))
-        self.translations = t.nn.Parameter(t.zeros(3,k))
-        self.affine_layer = monai.networks.layers.AffineTransform(mode = mode,  normalized = True, padding_mode = "zeros")
-        self.device = device
-        
-    def forward(self, im_slices, target_dict):
-        #transformed_slices = list()
-        for sl in range(0,self.k):
-            affine = self.create_T(self.rotations[:,sl], self.translations[:,sl], self.device)
-            im_slices[sl]["image"] = self.affine_layer(im_slices[sl]["image"], affine)
-        target_dict = utils.reconstruct_3d_volume(im_slices, target_dict)
-        # print("target in low res")
-        # plt.imshow(t.squeeze(target_dict["image"])[12,:,:].detach().numpy(), cmap="gray")
-        # plt.show()
-        return target_dict
 
 class Reconstruction(t.nn.Module):
     def __init__(self, n_slices:int, device):
@@ -40,6 +17,22 @@ class Reconstruction(t.nn.Module):
         return im_slices  
     
     def rotation_matrix(self, angles):
+        """
+        Returns a rotation matrix for given angles.
+        Own implementation to assure the possibility of a computational graph
+        for update of parameters
+
+        Parameters
+        ----------
+        angles : list
+            desired angles in radian
+
+        Returns
+        -------
+        torch.tensor
+            rotation matrix
+
+        """
         s = t.sin(angles)
         c = t.cos(angles)
         rot_x = t.cat((t.tensor([1,0,0]),
@@ -64,7 +57,6 @@ class Reconstruction(t.nn.Module):
             convention XYZ
         translations : t.tensor (1x3)
             translations
-
         Returns
         -------
         T : TYPE

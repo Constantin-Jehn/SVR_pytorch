@@ -1,6 +1,4 @@
 import os
-from matplotlib import transforms
-import nibabel as nib
 import matplotlib.pyplot as plt
 from sympy import rotations
 import torch as t
@@ -21,39 +19,6 @@ from monai.transforms import (
 from copy import deepcopy
 
 import numpy as np
-
-
-def save_target(obj, folder, filename):
-    """
-    Parameters
-    ----------
-    obj : volume object
-        created volume object you want to save
-    folder : string
-    filename : string
-    Returns
-    -------
-    None.
-
-    """
-    path = os.path.join(folder, filename)
-    #dest = filename + ".pickle"
-    dill.dump(obj, file = open(path + ".pickle", "wb"))
-
-def open_target(folder,filename):
-    """
-    Parameters
-    ----------
-    folder : string
-    filename : string
-
-    Returns
-    -------
-    target as volume object
-
-    """
-    path = os.path.join(folder, filename)
-    return dill.load((open(path + ".pickle","rb")))
 
 def show_stack(t_image):
     """ Function to display row of image slices """

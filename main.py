@@ -12,7 +12,6 @@ from monai.transforms import (
     RandAffine
 )
 import os
-import utils
 import numpy as np
 import reconstruction_model
 import torch as t
@@ -22,60 +21,32 @@ from SVR_optimizer import SVR_optimizer
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
     
-    folder = 'sample_data'
-    filename = '10_3T_nody_001_cropped.nii'
-    pixdim = (3,3,3)
-    epochs = 10
-    lr = 0.001
-    opt_alg = "Adam"
-    loss_fn = "ncc"
-    mode = "bilinear"
-    save_to = filename[:-7] + '_' + ','.join(map(str,(pixdim))) + '_lr' + str(lr).replace('.',',') + '_' + str(epochs) + '_' + mode
-
-    svr_opt = SVR_optimizer(folder, filename, pixdim, device, mode)
-    target_dict, loss_log = svr_opt.optimize(epochs, lr, loss_fnc =  loss_fn, opt_alg = opt_alg)
-    
-    
-    plot_dest = os.path.join("plots", save_to)
-    plot_title = opt_alg + " pix_dim = (" + ','.join(map(str,(pixdim))) + ")" 
-    plt.plot(loss_log)
-    plt.title(plot_title)
-    plt.xlabel("epoch")
-    plt.ylabel(loss_fn)
-    plt.grid()
-    plt.savefig(plot_dest)
-    plt.show()
-    
-    folder = "test_reconstruction_monai"
-    path = os.path.join(folder,opt_alg)
-    nifti_saver = monai.data.NiftiSaver(output_dir=path, 
-                                        resample = False, mode = mode, padding_mode = "zeros",
-                                        separate_folder=False)
-    
-    target_dict["image_meta_dict"]["filename_or_obj"] = save_to
-    nifti_saver.save(target_dict["image"], meta_data=target_dict["image_meta_dict"])
-
-if __name__ == '__main__':
     filenames = ["10_3T_nody_001.nii.gz",
-"10_3T_nody_002.nii.gz",
-"14_3T_nody_001.nii.gz",
-"14_3T_nody_002.nii.gz",
-"21_3T_nody_001.nii.gz",
-"21_3T_nody_002.nii.gz",
-"23_3T_nody_001.nii.gz",
-"23_3T_nody_002.nii.gz"]
+                 "10_3T_nody_002.nii.gz",
+                 "14_3T_nody_001.nii.gz",
+                 "14_3T_nody_002.nii.gz",
+                 "21_3T_nody_001.nii.gz",
+                 "21_3T_nody_002.nii.gz",
+                 "23_3T_nody_001.nii.gz",
+                 "23_3T_nody_002.nii.gz"]
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
-    file_world = "world.nii.gz"
+    
     pixdim = (0.5,0.5,0.5)
 
     src_folder = "sample_data"
-    dst_folder = "cropped_images"
+    prep_folder = "cropped_images"
     src_folder = "sample_data"
-    dst_folder = "cropped_images"
+    mode = "bilinear"
     
-    svr_optimizer = SVR_optimizer(src_folder,dst_folder, filenames, file_mask,pixdim, "cpu", mode = "bilinear")
     
-    world_stack = svr_optimizer.optimize_multiple_stacks(3, 0.001)
+    svr_optimizer = SVR_optimizer(src_folder,prep_folder, filenames, file_mask,pixdim, "cpu", mode = mode)
+    
+    epochs = 2
+    lr = 0.001
+    loss_fnc = "ncc"
+    opt_alg = "Adam"
+    
+    world_stack, loss_log = svr_optimizer.optimize_multiple_stacks(epochs, lr, loss_fnc=loss_fnc, opt_alg=opt_alg)
     
     fixed_image = svr_optimizer.fixed_image
     fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
@@ -84,15 +55,19 @@ if __name__ == '__main__':
     folder2 = "stacks"
     path = os.path.join(folder,folder2)
     
-    mode = "bilinear"
+    
     nifti_saver = monai.data.NiftiSaver(output_dir=path, 
                                         resample = False, mode = mode, padding_mode = "zeros",
                                         separate_folder=False)
+    save_to = 'reconstruction_' + opt_alg + '_' + ','.join(map(str,(pixdim))) + '_lr' + str(lr).replace('.',',') + '_' + str(epochs) + '_' + mode
     
-    world_stack["image_meta_dict"]["filename_or_obj"] = "reconstruction_world_stack_1304_Adam_0.001.nii.gz"
+    world_stack["image_meta_dict"]["filename_or_obj"] = save_to + "nii.gz"
     fixed_image["image_meta_dict"]["filename_or_obj"] = "reconstruction_fixed_image.nii.gz"
     
     
     nifti_saver.save(world_stack["image"], meta_data=world_stack["image_meta_dict"])
     nifti_saver.save(fixed_image["image"], meta_data=fixed_image["image_meta_dict"])
-    #optimize()
+
+if __name__ == '__main__':
+    
+    optimize()
