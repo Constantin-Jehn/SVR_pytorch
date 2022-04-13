@@ -6,8 +6,8 @@ class Reconstruction(t.nn.Module):
         super().__init__()
         self.device = device
         self.n_slices = n_slices
-        self.rotations = t.nn.Parameter(t.zeros(3,n_slices))
-        self.translations = t.nn.Parameter(t.zeros(3,n_slices))
+        self.rotations = t.nn.Parameter(t.zeros(3,n_slices, device = self.device))
+        self.translations = t.nn.Parameter(t.zeros(3,n_slices, device = self.device))
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
     
     def forward(self, im_slices):
@@ -49,7 +49,7 @@ class Reconstruction(t.nn.Module):
         return t.matmul(t.matmul(rot_z, rot_y),rot_x)
         
 
-    def create_T(self,rotations, translations, device):
+    def create_T(self,rotations, translations):
         """
         Parameters
         ----------
@@ -63,9 +63,9 @@ class Reconstruction(t.nn.Module):
             DESCRIPTION.
 
         """
-        rotation = self.rotation_matrix(rotations).to(device)
-        bottom = t.tensor([0,0,0,1]).to(device)
-        trans = t.cat((rotation,translations.unsqueeze(1)),dim=1).to(device)
+        rotation = self.rotation_matrix(rotations).to(self.device)
+        bottom = t.tensor([0,0,0,1],device = self.device)
+        trans = t.cat((rotation,translations.unsqueeze(1)),dim=1).to(self.device)
         T = t.cat((trans,bottom.unsqueeze(0)),dim = 0)
         return T
             

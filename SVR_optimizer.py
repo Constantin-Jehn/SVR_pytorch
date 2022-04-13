@@ -66,9 +66,9 @@ class SVR_optimizer():
         self.crop_images()
         
         #remains in initial coordiate system
-        self.ground_truth = self.load_stacks()
+        self.ground_truth = self.load_stacks(to_device=True)
         #self.resample_to_pixdim()
-        self.stacks = self.load_stacks()
+        self.stacks = self.load_stacks(to_device=True)
 
         #slices is a list: each entry is a list of all slices of one stack
         self.slices, self.n_slices_max = self.construct_slices()
@@ -152,7 +152,7 @@ class SVR_optimizer():
             resampled_stack.save(path_dst)    
     
     
-    def load_stacks(self):
+    def load_stacks(self, to_device = False):
         """
         After cropping the initial images in low resolution are saved in their original coordinates
         for the loss computation
@@ -165,6 +165,8 @@ class SVR_optimizer():
         add_channel = AddChanneld(keys=["image"])
         loader = LoadImaged(keys = ["image"])
         to_tensor = ToTensord(keys = ["image"])
+        if to_device:
+            to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         
         stack_list = list()
         for i in range(0,self.k):
@@ -175,6 +177,10 @@ class SVR_optimizer():
             stack_dict = add_channel(stack_dict)
             #keep meta data correct
             stack_dict["image_meta_dict"]["spatial_shape"] = np.array(list(stack_dict["image"].shape)[1:])
+            
+            #move to gpu
+            if to_device:
+                stack_dict = to_device(stack_dict)
             stack_list.append(stack_dict)
         return stack_list
             
@@ -225,7 +231,7 @@ class SVR_optimizer():
         None
         """
         n_slices = len(im_slices)
-        tmp = t.zeros(im_slices[0].shape)
+        tmp = t.zeros(im_slices[0].shape, device = self.device)
         for sli  in range(0,n_slices):
             tmp = tmp + im_slices[sli]
         #update target_dict
@@ -310,11 +316,12 @@ class SVR_optimizer():
             contains nifti file of the the reconstructed brain.
 
         """
-        
+        to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         tmp = t.zeros_like(self.stacks[0]["image"])
         for st in range(1,self.k):
             tmp = tmp + self.stacks[st]["image"]
         world_stack = {"image":tmp, "image_meta_dict": self.stacks[0]["image_meta_dict"]}
+        world_stack = to_device(world_stack)
         return world_stack
     
         
@@ -346,7 +353,7 @@ class SVR_optimizer():
         stack_image, fixed_image_image = stack["image"], self.fixed_image["image"]
         n_slices = stack_image.shape[-1]
         
-        loss = t.zeros(1)
+        loss = t.zeros(1, device=self.device)
         for sl in range(0,n_slices):
             loss = loss + monai_loss(stack_image[:,:,:,:,sl], fixed_image_image[:,:,:,:,sl])
         return loss
@@ -386,6 +393,7 @@ class SVR_optimizer():
             loss_stack = list()
             print(f"\n  stack: {st}")
             model = models[st]
+            model.to(self.device)
             slices_tmp = self.slices[st]
             
             if opt_alg == "SGD":
