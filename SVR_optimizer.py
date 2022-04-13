@@ -44,13 +44,15 @@ class SVR_optimizer():
         None.
 
         """
+        
+        self.device = device
         self.src_folder = src_folder
         self.prep_folder = prep_folder
         self.stack_filenames = stack_filenames
         self.k = len(self.stack_filenames)
         self.mask_filename = mask_filename
         self.pixdim = pixdim
-        self.device = device
+        
         self.mode = mode
         
         self.crop_images(upsampling=True)
