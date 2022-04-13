@@ -63,6 +63,8 @@ class SVR_optimizer():
         print("fixed_image_generated")
         
         self.crop_images()
+        
+        #remains in initial coordiate system
         self.ground_truth = self.load_stacks()
         #self.resample_to_pixdim()
         self.stacks = self.load_stacks()
@@ -226,7 +228,7 @@ class SVR_optimizer():
         for sli  in range(0,n_slices):
             tmp = tmp + im_slices[sli]
         #update target_dict
-        self.stacks[n_stack]["image"] = tmp
+        self.ground_truth[n_stack]["image"] = tmp
     
     
     def batch_to_image(self, stacks):
@@ -322,6 +324,33 @@ class SVR_optimizer():
              self.stacks[n_stack]["image_meta_dict"]["original_affine"] = original_affine       
      
         
+     
+    def resample_to_fixed_image(self, n_stack:int):
+        """
+        resamples the updated stack in "self.ground_truth" into "self.stacks"
+        for loss computation
+        Parameters
+        ----------
+        n_stack : int
+            index of stack
+
+        Returns
+        -------
+        None.
+
+        """
+        dst_meta = self.fixed_image["image_meta_dict"]
+        resampler = monai.transforms.ResampleToMatch()
+        
+        file_obj = deepcopy(self.stacks[n_stack]["image_meta_dict"]["filename_or_obj"])
+        original_affine = deepcopy(self.stacks[n_stack]["image_meta_dict"]["original_affine"])
+        self.stacks[n_stack]["image"], self.stacks[n_stack]["image_meta_dict"] = resampler(self.ground_truth[n_stack]["image"],src_meta = self.ground_truth[n_stack]["image_meta_dict"], 
+                                                                                      dst_meta = dst_meta, padding_mode = "zeros")
+        
+        self.stacks[n_stack]["image_meta_dict"]["filename_or_obj"] = file_obj
+        self.stacks[n_stack]["image_meta_dict"]["original_affine"] = original_affine 
+     
+        
     def create_common_volume(self):
         """
         Combine updated local stacks that are in common coordinate system, to 
@@ -415,17 +444,17 @@ class SVR_optimizer():
             
                 transformed_slices = model(slices_tmp)
                 
-                self.stacks[st] = add_channel(self.stacks[st])
+                self.ground_truth[st] = add_channel(self.ground_truth[st])
                 
                 #only changes image
                 self.update_local_stack(transformed_slices, n_stack = st)
                 
                 #batch to image
-                self.stacks[st]["image"] = t.squeeze(self.stacks[st]["image"]).unsqueeze(0)
+                self.ground_truth[st]["image"] = t.squeeze(self.ground_truth[st]["image"]).unsqueeze(0)
                 
                 #self.resample_to_hr(n_stack = st)
                 
-                self.resample_to_common_coord(n_stack=st, to_fixed=True)
+                self.resample_to_fixed_image(n_stack=st)
                 
                 self.stacks[st] = add_channel(self.stacks[st])
 

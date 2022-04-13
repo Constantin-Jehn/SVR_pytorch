@@ -89,7 +89,7 @@ if __name__ == '__main__':
                                         resample = False, mode = mode, padding_mode = "zeros",
                                         separate_folder=False)
     
-    world_stack["image_meta_dict"]["filename_or_obj"] = "reconstruction_world_stack_all_Adam_0.001.nii.gz"
+    world_stack["image_meta_dict"]["filename_or_obj"] = "reconstruction_world_stack_1304_Adam_0.001.nii.gz"
     fixed_image["image_meta_dict"]["filename_or_obj"] = "reconstruction_fixed_image.nii.gz"
     
     
