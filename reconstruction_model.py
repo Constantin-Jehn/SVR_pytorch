@@ -4,6 +4,7 @@ import monai
 class Reconstruction(t.nn.Module):
     def __init__(self, n_slices:int, device):
         super().__init__()
+        
         self.device = device
         self.n_slices = n_slices
         self.rotations = t.nn.Parameter(t.zeros(3,n_slices, device = self.device))
@@ -12,8 +13,7 @@ class Reconstruction(t.nn.Module):
     
     def forward(self, im_slices):
         for sli in range(0,self.n_slices):
-            affine = self.create_T(self.rotations[:,sli],self.translations[:,sli])
-            im_slices[sli] = self.affine_layer(im_slices[sli], affine)
+            im_slices[sli] = self.affine_layer(im_slices[sli], self.create_T(self.rotations[:,sli],self.translations[:,sli]))
         return im_slices  
     
     def rotation_matrix(self, angles):

@@ -16,6 +16,7 @@ import numpy as np
 import reconstruction_model
 import torch as t
 from copy import deepcopy
+import loss_module
 
 
 class SVR_optimizer():
@@ -46,6 +47,7 @@ class SVR_optimizer():
         """
         
         self.device = device
+        print(f'Program runs on: {self.device}')
         self.src_folder = src_folder
         self.prep_folder = prep_folder
         self.stack_filenames = stack_filenames
@@ -362,39 +364,6 @@ class SVR_optimizer():
         world_stack = to_device(world_stack)
         return world_stack
     
-        
-    def loss_function(self, stack, loss = "ncc"):
-        """
-        Calculate ncc loss as sum from all stacks or only from a single stack.
-        Stacks are here resamples into their initial cooridinates and resolution.
-        The image data is from the reconstructed volume in common coordinates
-        Parameters:
-        -------
-        n_stack: int
-            index to calculate loss of
-        
-        Returns
-        -------
-        loss : t.tensor
-            the loss
-        """
-        if loss == "ncc":
-            monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=5)
-        elif loss == "mi":
-            monai_loss = monai.losses.GlobalMutualInformationLoss()
-        else:
-            assert("Please choose a valid loss function: either ncc or mi")
-                
-        
-        #onl resample image keep local meta_data in-tact
-        stack_image, fixed_image_image = stack["image"], self.fixed_image["image"]
-        n_slices = stack_image.shape[-1]
-        
-        loss = t.zeros(1, device=self.device)
-        for sl in range(0,n_slices):
-            loss = loss + monai_loss(stack_image[:,:,:,:,sl], fixed_image_image[:,:,:,:,sl])
-        return loss
-    
     
     def optimize_multiple_stacks(self, epochs:int, lr, loss_fnc = "ncc", opt_alg = "Adam"):
         """
@@ -423,10 +392,16 @@ class SVR_optimizer():
         for st in range (0,self.k):
             n_slices = self.ground_truth[st]["image"].shape[-1]
             models.append(reconstruction_model.Reconstruction(n_slices = n_slices, device = self.device))
-
+        
+        
+        loss = loss_module.RegistrationLoss(loss_fnc, self.device)
+        
         loss_log = list()
         
+        
+        
         for st in range(0,self.k):
+            
             loss_stack = list()
             print(f"\n  stack: {st}")
             model = models[st]
@@ -435,8 +410,6 @@ class SVR_optimizer():
             ground_truth_image = deepcopy(self.ground_truth[st]["image"])
             
             slices_tmp = self.construct_slices_from_stack(self.ground_truth[st])
-            
-            
             
             if opt_alg == "SGD":
                 optimizer = t.optim.SGD(model.parameters(), lr = lr)
@@ -447,7 +420,7 @@ class SVR_optimizer():
                   
             for epoch in range(0,epochs):
                 model.train()
-                optimizer.zero_grad()
+                #optimizer.zero_grad()
             
                 transformed_slices = model(slices_tmp)
                 
@@ -465,15 +438,24 @@ class SVR_optimizer():
                 stack_tmp = add_channel(stack_tmp)
 
                 #caculates loss based on "stacks[st]" and fixed_image
-                loss = self.loss_function(stack_tmp, loss = loss_fnc)
+                #loss = self.loss_function(stack_tmp, loss = loss_fnc)
                 
-                loss_stack.append(loss.item())
+                loss_tensor = loss(self.fixed_image,stack_tmp)
+                
+                loss_stack.append(loss_tensor.item())
                 #here stack[st] is in coordinates of fixed image
-                print(f'Epoch: {epoch} loss: {loss.item()}')
+                print(f'Epoch: {epoch} loss: {loss_tensor.item()}')
                 
-                loss.backward(retain_graph=True)
+                if epoch == (epochs - 1) :
+                    rt_graph = False
+                else:
+                    rt_graph = True
+                    
+                #loss.backward(retain_graph=rt_graph)
+                loss_tensor.backward(retain_graph = rt_graph)
                 
                 optimizer.step()
+                
             # save loss
             loss_log.append(loss_stack)
             
@@ -486,10 +468,8 @@ class SVR_optimizer():
                 if param.requires_grad:
                     print (f'parameter {name} has value not equal to zero: {t.all(param.data == 0)}')
             
-            #self.stacks[st]["image"] = t.squeeze(self.stacks[st]["image"]).unsqueeze(0)
-                
-        #world_stack = self.create_common_volume()
         
+        #cast to image format
         self.common_volume["image"] = t.squeeze(self.common_volume["image"]).unsqueeze(0)
         return self.common_volume, loss_log
 

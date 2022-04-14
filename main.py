@@ -21,22 +21,22 @@ from SVR_optimizer import SVR_optimizer
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
     
-    filenames = ["10_3T_nody_001.nii.gz",
-                 "10_3T_nody_002.nii.gz",
-                 "14_3T_nody_001.nii.gz",
-                 "14_3T_nody_002.nii.gz"]
-    
-    
-    
-    
     # filenames = ["10_3T_nody_001.nii.gz",
     #              "10_3T_nody_002.nii.gz",
     #              "14_3T_nody_001.nii.gz",
-    #              "14_3T_nody_002.nii.gz",
-    #              "21_3T_nody_001.nii.gz",
-    #              "21_3T_nody_002.nii.gz",
-    #              "23_3T_nody_001.nii.gz",
-    #              "23_3T_nody_002.nii.gz"]
+    #              "14_3T_nody_002.nii.gz"]
+    
+    
+    
+    
+    filenames = ["10_3T_nody_001.nii.gz",
+                  "10_3T_nody_002.nii.gz",
+                  "14_3T_nody_001.nii.gz",
+                  "14_3T_nody_002.nii.gz",
+                  "21_3T_nody_001.nii.gz",
+                  "21_3T_nody_002.nii.gz",
+                  "23_3T_nody_001.nii.gz",
+                  "23_3T_nody_002.nii.gz"]
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
     pixdim = (0.5,0.5,0.5)
@@ -47,9 +47,9 @@ def optimize():
     mode = "bilinear"
     
     
-    svr_optimizer = SVR_optimizer(src_folder, prep_folder, filenames, file_mask,pixdim, "cpu", mode = mode)
+    svr_optimizer = SVR_optimizer(src_folder, prep_folder, filenames, file_mask,pixdim, device, mode = mode)
     
-    epochs = 1
+    epochs = 3
     lr = 0.001
     loss_fnc = "ncc"
     opt_alg = "Adam"
