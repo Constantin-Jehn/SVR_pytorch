@@ -24,14 +24,22 @@ def optimize():
     filenames = ["10_3T_nody_001.nii.gz",
                  "10_3T_nody_002.nii.gz",
                  "14_3T_nody_001.nii.gz",
-                 "14_3T_nody_002.nii.gz",
-                 "21_3T_nody_001.nii.gz",
-                 "21_3T_nody_002.nii.gz",
-                 "23_3T_nody_001.nii.gz",
-                 "23_3T_nody_002.nii.gz"]
+                 "14_3T_nody_002.nii.gz"]
+    
+    
+    
+    
+    # filenames = ["10_3T_nody_001.nii.gz",
+    #              "10_3T_nody_002.nii.gz",
+    #              "14_3T_nody_001.nii.gz",
+    #              "14_3T_nody_002.nii.gz",
+    #              "21_3T_nody_001.nii.gz",
+    #              "21_3T_nody_002.nii.gz",
+    #              "23_3T_nody_001.nii.gz",
+    #              "23_3T_nody_002.nii.gz"]
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
-    pixdim = (0.5,0.5,1)
+    pixdim = (0.5,0.5,0.5)
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
@@ -41,7 +49,7 @@ def optimize():
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, filenames, file_mask,pixdim, "cpu", mode = mode)
     
-    epochs = 3
+    epochs = 1
     lr = 0.001
     loss_fnc = "ncc"
     opt_alg = "Adam"
@@ -59,10 +67,10 @@ def optimize():
     nifti_saver = monai.data.NiftiSaver(output_dir=path, 
                                         resample = False, mode = mode, padding_mode = "zeros",
                                         separate_folder=False)
-    save_to = 'reconstruction_' + opt_alg + '_' + ','.join(map(str,(pixdim))) + '_lr' + str(lr).replace('.',',') + '_' + str(epochs) + '_' + mode
+    save_to = 'reconstruction_' + opt_alg + '_(' + str(pixdim[0]).replace('.',',')  +'-'+ str(pixdim[1]).replace('.',',') +'-'+ str(pixdim[2]).replace('.',',') + ')_lr' + str(lr).replace('.',',') + '_' + str(epochs) + '_' + mode
     
     world_stack["image_meta_dict"]["filename_or_obj"] = save_to + "nii.gz"
-    fixed_image["image_meta_dict"]["filename_or_obj"] = "reconstruction_fixed_image.nii.gz"
+    fixed_image["image_meta_dict"]["filename_or_obj"] = "reconstruction_fixed_image_average.nii.gz"
     
     
     nifti_saver.save(world_stack["image"], meta_data=world_stack["image_meta_dict"])

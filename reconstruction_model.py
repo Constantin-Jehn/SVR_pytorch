@@ -12,7 +12,7 @@ class Reconstruction(t.nn.Module):
     
     def forward(self, im_slices):
         for sli in range(0,self.n_slices):
-            affine = self.create_T(self.rotations[:,sli],self.translations[:,sli], self.device)
+            affine = self.create_T(self.rotations[:,sli],self.translations[:,sli])
             im_slices[sli] = self.affine_layer(im_slices[sli], affine)
         return im_slices  
     
