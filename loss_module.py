@@ -13,11 +13,9 @@ class RegistrationLoss(t.nn.Module):
         self.device = device
 
     def forward(self, fixed_image, stack):
-        
         stack_image, fixed_image_image = stack["image"], fixed_image["image"]
         n_slices = stack_image.shape[-1]
         loss = t.zeros(1, device = self.device)
-        
         for sl in range(0,n_slices):
             loss = loss + self.monai_loss(stack_image[:,:,:,:,sl], fixed_image_image[:,:,:,:,sl])
             

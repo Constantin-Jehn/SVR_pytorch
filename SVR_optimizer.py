@@ -13,7 +13,7 @@ from monai.transforms import (
 )
 import os
 import numpy as np
-import reconstruction_model
+import custom_models
 import torch as t
 from copy import deepcopy
 import loss_module
@@ -45,7 +45,6 @@ class SVR_optimizer():
         None.
 
         """
-        
         self.device = device
         print(f'Program runs on: {self.device}')
         self.src_folder = src_folder
@@ -63,6 +62,7 @@ class SVR_optimizer():
         self.fixed_image = self.create_common_volume()
         add_channel = AddChanneld(keys=["image"])
         self.fixed_image = add_channel(self.fixed_image)
+        self.fixed_image["image"].requires_grad = False
         print("fixed_image_generated")
         
         to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
@@ -119,17 +119,19 @@ class SVR_optimizer():
             cropped_stack = cropper(subject)
             
             if upsampling:
-                if i > 0 :
+                if i == 0:
+                    #only upsample first stack, for remaining stack it'd done by resamplich to this stack
+                    upsampler = tio.transforms.Resample(self.pixdim)
+                    cropped_stack = upsampler(cropped_stack)
+                else:
                     path_stack = os.path.join(self.prep_folder, self.stack_filenames[0])
                     resampler = tio.transforms.Resample(path_stack)
-                upsampler = tio.transforms.Resample(self.pixdim)
-                
-                if i > 0:
-                    cropped_stack = resampler(subject)
-                cropped_stack = upsampler(cropped_stack)
-            
+                    cropped_stack = resampler(cropped_stack)
+
             path_dst = os.path.join(self.prep_folder, filename)
             cropped_stack.stack.save(path_dst)
+            
+        
         #create a common place for the reconstruction
         common_image = tio.Image(tensor = t.zeros((1,100,100,100)))
         path_dst = os.path.join(self.prep_folder, "world.nii.gz")
@@ -186,37 +188,6 @@ class SVR_optimizer():
                 stack_dict = to_device(stack_dict)
             stack_list.append(stack_dict)
         return stack_list
-            
-    def construct_slices(self):
-        """
-        from the prepocessed (cropped + corr. resolution) image slices are 
-        created that will be used to perform the rotations/translations on
-        Returns
-        -------
-        slices : list
-            each entry belongs to one image, and contains again a list of all 
-            the slices represented as 3d torch tensor
-
-        """
-        #slices are used in the reconstruction model where formate (batch,channel, HWD) is necessary
-        add_channel = AddChanneld(keys=["image"])
-        slices = list()
-        
-        n_slices_max = 0 
-        for st in range(0,self.k):
-            stack = add_channel(self.stacks[st])
-            stack_image = stack["image"]
-            n_slices = stack_image.shape[-1]
-            if n_slices > n_slices_max: 
-                n_slices_max = n_slices
-            im_slices = list()
-            for i in range (0,n_slices):
-                tmp = deepcopy(stack_image)
-                tmp[:,:,:,:,:i] = 0
-                tmp[:,:,:,:,i+1:] = 0
-                im_slices.append(tmp)
-            slices.append(im_slices)
-        return slices, n_slices_max
     
     def construct_slices_from_stack(self, stack):
         """
@@ -244,29 +215,6 @@ class SVR_optimizer():
             tmp[:,:,:,:,i+1:] = 0
             slices.append(tmp)
         return slices
-    
-    def update_local_stack(self, im_slices, local_stack):
-        """
-        use to update the stacks after transform (which should be optimized)
-        was applied to slices
-        Parameters
-        ----------
-        im_slices : list 
-            contains slices of one stack
-        n_stack : int
-            index of stack to be updated
-        Returns
-        -------
-        None
-        """
-        n_slices = len(im_slices)
-        tmp = t.zeros(im_slices[0].shape, device = self.device)
-        for sli  in range(0,n_slices):
-            tmp = tmp + im_slices[sli]
-        #update target_dict
-        local_stack["image"] = tmp
-        return local_stack
-                
 
     def resample_to_common_coord(self, n_stack = - 1, to_fixed = False):
         """
@@ -307,38 +255,6 @@ class SVR_optimizer():
              self.stacks[n_stack]["image_meta_dict"]["filename_or_obj"] = file_obj
              self.stacks[n_stack]["image_meta_dict"]["original_affine"] = original_affine       
      
-        
-     
-    def resample_to_fixed_image(self, local_stack):
-        """
-        resamples the updated stack in "self.ground_truth" into "self.stacks"
-        for loss computation
-        Parameters
-        ----------
-        local_stack : dict
-            updated stack on local coordinates
-        world_stack : dict
-            stck in world coordinates (fixed_image)
-
-        Returns
-        -------
-        None.
-
-        """
-        dst_meta = self.fixed_image["image_meta_dict"]
-        resampler = monai.transforms.ResampleToMatch()
-        
-        world_stack = {"image": t.zeros(1), "image_meta_dict":{}}
-        
-        file_obj = deepcopy(local_stack["image_meta_dict"]["filename_or_obj"])
-        original_affine = deepcopy(local_stack["image_meta_dict"]["affine"])
-        world_stack["image"], world_stack["image_meta_dict"] = resampler(local_stack["image"],src_meta = local_stack["image_meta_dict"], 
-                                                                                      dst_meta = dst_meta, padding_mode = "zeros")
-        
-        world_stack["image_meta_dict"]["filename_or_obj"] = file_obj
-        world_stack["image_meta_dict"]["original_affine"] = original_affine 
-        
-        return world_stack
      
         
     def create_common_volume(self):
@@ -386,13 +302,14 @@ class SVR_optimizer():
             list of losses
 
         """
-        add_channel = AddChanneld(keys=["image"])
         models = list()
         #create model for each stack 
         for st in range (0,self.k):
             n_slices = self.ground_truth[st]["image"].shape[-1]
-            models.append(reconstruction_model.Reconstruction(n_slices = n_slices, device = self.device))
+            models.append(custom_models.Reconstruction(n_slices = n_slices, device = self.device))
         
+        resampling_model = custom_models.ResamplingToFixed()
+        resampling_model.to(self.device)
         
         loss = loss_module.RegistrationLoss(loss_fnc, self.device)
         
@@ -417,30 +334,18 @@ class SVR_optimizer():
                 optimizer = t.optim.Adam(model.parameters(), lr = lr)
             else:
                 assert("Choose SGD or Adam as optimizer")
-                  
+            optimizer.zero_grad()
+            
+            local_stack = self.ground_truth[st]
+            
             for epoch in range(0,epochs):
                 model.train()
-                #optimizer.zero_grad()
-            
+
                 transformed_slices = model(slices_tmp)
                 
-                self.ground_truth[st] = add_channel(self.ground_truth[st])
+                resampled_stack = resampling_model(transformed_slices, local_stack, self.fixed_image)
                 
-                #only changes image in "ground truth"
-                self.ground_truth[st] = self.update_local_stack(transformed_slices, self.ground_truth[st])
-                
-                #batch to image
-                self.ground_truth[st]["image"] = t.squeeze(self.ground_truth[st]["image"]).unsqueeze(0)
-                
-                #brings changes to "stacks"
-                stack_tmp = self.resample_to_fixed_image(self.ground_truth[st])
-                
-                stack_tmp = add_channel(stack_tmp)
-
-                #caculates loss based on "stacks[st]" and fixed_image
-                #loss = self.loss_function(stack_tmp, loss = loss_fnc)
-                
-                loss_tensor = loss(self.fixed_image,stack_tmp)
+                loss_tensor = loss(self.fixed_image,resampled_stack)
                 
                 loss_stack.append(loss_tensor.item())
                 #here stack[st] is in coordinates of fixed image
@@ -450,8 +355,7 @@ class SVR_optimizer():
                     rt_graph = False
                 else:
                     rt_graph = True
-                    
-                #loss.backward(retain_graph=rt_graph)
+                
                 loss_tensor.backward(retain_graph = rt_graph)
                 
                 optimizer.step()
@@ -460,17 +364,17 @@ class SVR_optimizer():
             loss_log.append(loss_stack)
             
             #update common_volume
-            self.common_volume["image"] = self.common_volume["image"] + stack_tmp["image"]
+            self.common_volume["image"] = self.common_volume["image"] + resampled_stack["image"]
             #re-initialize the ground truth data
             self.ground_truth[st]["image"] = ground_truth_image
             
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    print (f'parameter {name} has value not equal to zero: {t.all(param.data == 0)}')
+            #for name, param in model.named_parameters():
+               # if param.requires_grad:
+                    #print (f'parameter {name} has value not equal to zero: {t.all(param.data == 0)}')
             
-        
         #cast to image format
         self.common_volume["image"] = t.squeeze(self.common_volume["image"]).unsqueeze(0)
+        
         return self.common_volume, loss_log
 
 
