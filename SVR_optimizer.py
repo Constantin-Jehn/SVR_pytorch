@@ -326,6 +326,7 @@ class SVR_optimizer():
             
             ground_truth_image = deepcopy(self.ground_truth[st]["image"])
             
+            #in batch first shape
             slices_tmp = self.construct_slices_from_stack(self.ground_truth[st])
             
             if opt_alg == "SGD":
@@ -341,9 +342,9 @@ class SVR_optimizer():
             for epoch in range(0,epochs):
                 model.train()
 
-                transformed_slices = model(slices_tmp)
+                transformed_slices = model(slices_tmp, local_stack["image_meta_dict"], self.fixed_image["image_meta_dict"])
                 
-                resampled_stack = resampling_model(transformed_slices, local_stack, self.fixed_image)
+                #resampled_stack = resampling_model(transformed_slices, local_stack["image_meta_dict"], self.fixed_image["image_meta_dict"])
                 
                 loss_tensor = loss(self.fixed_image,resampled_stack)
                 

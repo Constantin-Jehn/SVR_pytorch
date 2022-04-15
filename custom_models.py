@@ -24,9 +24,14 @@ class Reconstruction(t.nn.Module):
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
     
-    def forward(self, im_slices):
+    def forward(self, im_slices, ground_meta, fixed_image_meta):
+        resampler = monai.transforms.ResampleToMatch()
         for sli in range(0,self.n_slices):
             im_slices[sli] = self.affine_layer(im_slices[sli], self.create_T(self.rotations[sli],self.translations[sli]))
+            im_slices[sli] = t.squeeze(im_slices[sli]).unsqueeze(0)
+            im_slices[sli], _ = resampler(im_slices[sli],src_meta = ground_meta, 
+                                         dst_meta = fixed_image_meta, padding_mode = "zeros")
+            
         return im_slices  
     
     def rotation_matrix(self, angles):
@@ -87,19 +92,22 @@ class ResamplingToFixed(t.nn.Module):
     def __initi__(self):
         super().__init__()
         
-    def forward(self, im_slices, local_stack, fixed_image):
-        add_channel = AddChanneld(keys=["image"])
-        local_stack = add_channel(local_stack)
+    def forward(self, im_slices, ground_meta, fixed_image_meta):
         
-        local_stack = self.update_local_stack(im_slices, local_stack)
+        #add_channel = AddChanneld(keys=["image"])
         
-        local_stack["image"] = t.squeeze(local_stack["image"]).unsqueeze(0)
+        #local_stack = add_channel(local_stack)
         
-        local_stack = self.resample_to_fixed_image(local_stack, fixed_image)
+        #local_stack = self.update_local_stack(im_slices, local_stack)
         
-        local_stack = add_channel(local_stack)
+        #local_stack["image"] = t.squeeze(local_stack["image"]).unsqueeze(0)
         
-        return local_stack
+        
+        
+        #im_slices = self.resample_to_fixed_image(im_slices, ground_meta, fixed_image)
+        
+        
+        return im_slices
         
         
         
@@ -125,7 +133,7 @@ class ResamplingToFixed(t.nn.Module):
         return local_stack
     
     
-    def resample_to_fixed_image(self, local_stack, fixed_image):
+    def resample_to_fixed_image(self, im_slices, ground_meta, fixed_image_meta):
         """
         resamples the updated stack in "self.ground_truth" into "self.stacks"
         for loss computation
@@ -142,19 +150,15 @@ class ResamplingToFixed(t.nn.Module):
             local_stack in world coordinates
 
         """
-        dst_meta = fixed_image["image_meta_dict"]
         resampler = monai.transforms.ResampleToMatch()
+        n_slices = len(im_slices)
         
-        world_stack = {"image": t.zeros(1), "image_meta_dict":{}}
+        for sl in range(0,n_slices):
+            im_slices[sl] = t.squeeze(im_slices[sl]).unsqueeze(0)
+
+            im_slices[sl], _ = resampler(im_slices[sl],src_meta = ground_meta, 
+                                         st_meta = fixed_image_meta, padding_mode = "zeros")
         
-        file_obj = deepcopy(local_stack["image_meta_dict"]["filename_or_obj"])
-        original_affine = deepcopy(local_stack["image_meta_dict"]["affine"])
-        world_stack["image"], world_stack["image_meta_dict"] = resampler(local_stack["image"],src_meta = local_stack["image_meta_dict"], 
-                                                                                      dst_meta = dst_meta, padding_mode = "zeros")
-        
-        world_stack["image_meta_dict"]["filename_or_obj"] = file_obj
-        world_stack["image_meta_dict"]["original_affine"] = original_affine 
-        
-        return world_stack
+        return im_slices
         
         
