@@ -38,7 +38,7 @@ def optimize():
     #               "23_3T_nody_002.nii.gz"]
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
-    pixdim = (0.4,0.5,0.8)
+    pixdim = (1,1,1)
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
@@ -48,7 +48,7 @@ def optimize():
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, filenames, file_mask,pixdim, device, mode = mode)
     
-    epochs = 3
+    epochs = 2
     lr = 0.001
     loss_fnc = "ncc"
     opt_alg = "Adam"
