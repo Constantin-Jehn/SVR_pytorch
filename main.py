@@ -38,7 +38,7 @@ def optimize():
     #               "23_3T_nody_002.nii.gz"]
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
-    pixdim = (1,1,1)
+    pixdim = (0.5,0.5,0.5)
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"

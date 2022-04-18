@@ -17,6 +17,7 @@ import custom_models
 import torch as t
 from copy import deepcopy
 import loss_module
+import time
 
 
 class SVR_optimizer():
@@ -45,6 +46,7 @@ class SVR_optimizer():
         None.
 
         """
+        timer = time.time()
         self.device = device
         print(f'Program runs on: {self.device}')
         self.src_folder = src_folder
@@ -70,7 +72,7 @@ class SVR_optimizer():
         self.crop_images(upsampling = False)
         #remains in initial coordiate system
         self.ground_truth = self.load_stacks(to_device=True)
-        print("preprocessing done")
+        print(f'preprocessing done in {time.time() - timer} s')
         #self.ground_truth, self.im_slices, self.target_dict, self.k = self.preprocess()
 
 
@@ -270,9 +272,9 @@ class SVR_optimizer():
         #resampling_model = custom_models.ResamplingToFixed()
         #resampling_model.to(self.device)
         
-        #loss = loss_module.RegistrationLoss(loss_fnc, self.device)
+        loss = loss_module.RegistrationLoss(loss_fnc, self.device)
         
-        #loss_log = list()
+        loss_log = list()
         
         
         
@@ -302,23 +304,29 @@ class SVR_optimizer():
                 model.train()
                 optimizer.zero_grad()
                 
+                timer = time.time()
                 transformed_slices = model(slices_tmp, local_stack["image_meta_dict"], self.fixed_image["image_meta_dict"])
-                
-                #loss_tensor = loss(transformed_slices, self.fixed_image)
-                
+                print(f'forward pass. {time.time() - timer} s ')
+                timer = time.time()
+                loss_tensor = loss(transformed_slices, self.fixed_image)
+                print(f'loss:  {time.time() - timer} s ')
                 #loss_stack.append(loss_tensor.item())
                 
                 #here stack[st] is in coordinates of fixed image
                 #print(f'Epoch: {epoch} loss: {loss_tensor.item()}')
+                timer = time.time()
+                if epoch == (epochs - 1) :
+                    rt_graph = False
+                else:
+                    rt_graph = True
                 
-                # if epoch == (epochs - 1) :
-                #     rt_graph = False
-                # else:
-                #     rt_graph = True
-                
-                # loss_tensor.backward(retain_graph = rt_graph)
-                
-                # optimizer.step()
+                loss_tensor.backward(retain_graph = rt_graph)
+                print(f'backward:  {time.time() - timer} s ')
+                print(f'loss: {loss_tensor.item()}')
+                loss_log.append(loss_tensor.item())
+                timer = time.time()
+                optimizer.step()
+                print(f'optimizer:  {time.time() - timer} s ')
                 
             # save loss
             #loss_log.append(loss_stack)

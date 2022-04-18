@@ -5,7 +5,7 @@ class RegistrationLoss(t.nn.Module):
     def __init__(self,loss_fnc:str,device):
         super(RegistrationLoss,self).__init__()
         if loss_fnc == "ncc":
-            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=1, kernel_size=1)
+            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=3, kernel_size=3)
         elif loss_fnc == "mi":
             self.monai_loss = monai.losses.GlobalMutualInformationLoss()
         else:
@@ -22,9 +22,13 @@ class RegistrationLoss(t.nn.Module):
         
         for sl in range(0,n_slices):
             
-            relevant_indices = t.nonzero(im_slices[sl], as_tuple = True)
+            relevant_indices = t.nonzero(im_slices[sl,:,:,:,:], as_tuple = True)
             
-            pred, target = im_slices[sl][relevant_indices].unsqueeze(0).unsqueeze(0), fixed_image_image[relevant_indices].unsqueeze(0).unsqueeze(0)
+            min_ind = t.tensor([t.min(relevant_indices[i]).item() for i in range(len(relevant_indices))])
+            max_ind = t.tensor([t.max(relevant_indices[i]).item() for i in range(len(relevant_indices))])
+            
+            pred = im_slices[sl, min_ind[0]:max_ind[0] + 1, min_ind[1]:max_ind[1] + 1, min_ind[2]:max_ind[2] + 1 ,min_ind[3]:max_ind[3] + 1].unsqueeze(0)
+            target = fixed_image_image[0, min_ind[0]:max_ind[0] + 1, min_ind[1]:max_ind[1] + 1, min_ind[2]:max_ind[2] + 1 ,min_ind[3]:max_ind[3] + 1].unsqueeze(0)
             
             loss = loss + self.monai_loss(pred, target)
             
