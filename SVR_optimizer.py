@@ -61,13 +61,16 @@ class SVR_optimizer():
         self.crop_images(upsampling=True)
         self.fixed_image = self.create_common_volume()
         add_channel = AddChanneld(keys=["image"])
-        self.fixed_image = add_channel(self.fixed_image)
-        self.fixed_image["image"].requires_grad = False
-        print("fixed_image_generated")
         
         to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        self.common_volume = {"image": t.zeros_like(self.fixed_image["image"],device=self.device), "image_meta_dict": deepcopy(self.fixed_image["image_meta_dict"])}
-        self.common_volume = to_device(self.common_volume)
+        self.fixed_image = add_channel(self.fixed_image)
+        self.fixed_image["image"].requires_grad = False
+        self.fixed_image = to_device(self.fixed_image)
+        print("fixed_image_generated")
+        
+        
+        self.initial_vol = {"image": deepcopy(self.fixed_image["image"]), "image_meta_dict": deepcopy(self.fixed_image["image_meta_dict"])}
+        self.initial_vol = to_device(self.initial_vol)
         
         self.crop_images(upsampling = False)
         #remains in initial coordiate system
@@ -242,7 +245,7 @@ class SVR_optimizer():
         return world_stack
     
     
-    def optimize_multiple_stacks(self, epochs:int, lr, loss_fnc = "ncc", opt_alg = "Adam"):
+    def optimize_multiple_stacks(self, epochs:int, inner_epochs:int, lr, loss_fnc = "ncc", opt_alg = "Adam"):
         """
         Parameters
         ----------
@@ -274,78 +277,75 @@ class SVR_optimizer():
         
         loss = loss_module.RegistrationLoss(loss_fnc, self.device)
         
-        loss_log = list()
+        loss_log = np.zeros((epochs,self.k,inner_epochs))
         
         
         
-        for st in range(0,self.k):
+        for epoch in range(0,epochs):
+            print(f'\n\n Epoch: {epoch}')
             
-            #loss_stack = list()
-            print(f"\n  stack: {st}")
-            model = models[st]
-            model.to(self.device)
-            
-            ground_truth_image = deepcopy(self.ground_truth[st]["image"])
-            
-            #in batch first shape
-            slices_tmp = self.construct_slices_from_stack(self.ground_truth[st])
-            
-            if opt_alg == "SGD":
-                optimizer = t.optim.SGD(model.parameters(), lr = lr)
-            elif(opt_alg == "Adam"):
-                optimizer = t.optim.Adam(model.parameters(), lr = lr)
-            else:
-                assert("Choose SGD or Adam as optimizer")
-            
-            
-            local_stack = self.ground_truth[st]
-            
-            for epoch in range(0,epochs):
-                model.train()
-                optimizer.zero_grad()
+            for st in range(0,self.k):
+                #loss_stack = list()
+                print(f"\n  stack: {st}")
+                model = models[st]
+                model.to(self.device)
                 
-                timer = time.time()
-                transformed_slices = model(slices_tmp, local_stack["image_meta_dict"], self.fixed_image["image_meta_dict"])
-                print(f'forward pass. {time.time() - timer} s ')
-                timer = time.time()
-                loss_tensor = loss(transformed_slices, self.fixed_image)
-                print(f'loss:  {time.time() - timer} s ')
-                #loss_stack.append(loss_tensor.item())
+                #in batch first shape
+                slices_tmp = self.construct_slices_from_stack(self.ground_truth[st])
                 
-                #here stack[st] is in coordinates of fixed image
-                #print(f'Epoch: {epoch} loss: {loss_tensor.item()}')
-                timer = time.time()
-                if epoch == (epochs - 1) :
-                    rt_graph = False
+                if opt_alg == "SGD":
+                    optimizer = t.optim.SGD(model.parameters(), lr = lr)
+                elif(opt_alg == "Adam"):
+                    optimizer = t.optim.Adam(model.parameters(), lr = lr)
                 else:
-                    rt_graph = True
+                    assert("Choose SGD or Adam as optimizer")
+
+                local_stack = self.ground_truth[st]
                 
-                loss_tensor.backward(retain_graph = rt_graph)
-                print(f'backward:  {time.time() - timer} s ')
-                print(f'loss: {loss_tensor.item()}')
-                loss_log.append(loss_tensor.item())
-                timer = time.time()
-                optimizer.step()
-                print(f'optimizer:  {time.time() - timer} s ')
-                
-            # save loss
-            #loss_log.append(loss_stack)
+                for inner_epoch in range(0,inner_epochs):
+                    model.train()
+                    optimizer.zero_grad()
+                    
+                    timer = time.time()
+                    transformed_slices = model(slices_tmp.detach(), local_stack["image_meta_dict"], self.fixed_image["image_meta_dict"])
+                    transformed_slices = transformed_slices.to(self.device)
+                    print(f'forward pass. {time.time() - timer} s ')
+                    
+                    timer = time.time()
+                    loss_tensor = loss(transformed_slices, self.fixed_image)
+                    print(f'loss:  {time.time() - timer} s ')
+                    #loss_stack.append(loss_tensor.item())
+                    
+                    #here stack[st] is in coordinates of fixed image
+                    #print(f'Epoch: {epoch} loss: {loss_tensor.item()}')
+                    timer = time.time()
+                    if inner_epoch == (inner_epochs - 1) :
+                        rt_graph = False
+                    else:
+                        rt_graph = True
+                    
+                    loss_tensor.backward(retain_graph = False)
+                    print(f'backward:  {time.time() - timer} s ')
+                    print(f'loss: {loss_tensor.item()}')
+                    loss_log[epoch,st,inner_epoch] = loss_tensor
+                    timer = time.time()
+                    optimizer.step()
+                    print(f'optimizer:  {time.time() - timer} s ')
+
+            transformed_slices = transformed_slices.detach()
             
             #update common_volume
-            
-            self.common_volume["image"] = self.common_volume["image"] + t.sum(transformed_slices, dim = 0).unsqueeze(0)
-            #re-initialize the ground truth data
-            self.ground_truth[st]["image"] = ground_truth_image
+            self.fixed_image["image"] = t.sum(transformed_slices, dim = 0).unsqueeze(0)
             
             #for name, param in model.named_parameters():
                # if param.requires_grad:
                     #print (f'parameter {name} has value not equal to zero: {t.all(param.data == 0)}')
             
         #cast to image format
-        self.common_volume["image"] = t.squeeze(self.common_volume["image"]).unsqueeze(0)
+        self.fixed_image["image"] = t.squeeze(self.fixed_image["image"]).unsqueeze(0)
         
         loss_log = 0 
-        return self.common_volume, loss_log
+        return self.fixed_image, loss_log
 
 
     def bending_loss_fucntion_single_stack(target_dict_image):

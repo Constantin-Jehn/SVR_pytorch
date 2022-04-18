@@ -15,8 +15,7 @@ class RegistrationLoss(t.nn.Module):
     def forward(self, im_slices, fixed_image):
         n_slices = len(im_slices)
 
-        fixed_image_image = fixed_image["image"]
-        
+        fixed_image_image = fixed_image["image"].to(self.device)
         
         loss = t.zeros(1, device = self.device)
         
@@ -30,6 +29,7 @@ class RegistrationLoss(t.nn.Module):
             pred = im_slices[sl, min_ind[0]:max_ind[0] + 1, min_ind[1]:max_ind[1] + 1, min_ind[2]:max_ind[2] + 1 ,min_ind[3]:max_ind[3] + 1].unsqueeze(0)
             target = fixed_image_image[0, min_ind[0]:max_ind[0] + 1, min_ind[1]:max_ind[1] + 1, min_ind[2]:max_ind[2] + 1 ,min_ind[3]:max_ind[3] + 1].unsqueeze(0)
             
+            #print(f'pred: {str(pred.device)}, target: {str(target.device)}, loss: {str(loss.device)}')
             loss = loss + self.monai_loss(pred, target)
             
         return loss
