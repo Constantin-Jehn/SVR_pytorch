@@ -211,15 +211,31 @@ class SVR_optimizer():
         stack = add_channel(stack)
         stack_image = stack["image"]
         
-        n_slices = stack_image.shape[-1]
+        
+        
+        slice_dim, n_slices = list(stack_image.shape[2:]).index(min(list(stack_image.shape[2:]))),  min(list(stack_image.shape[2:]))
         
         slices = t.zeros_like(stack_image).repeat(n_slices,1,1,1,1)
-        for i in range (0,n_slices):
-            tmp = deepcopy(stack_image)
-            tmp[:,:,:,:,:i] = 0
-            tmp[:,:,:,:,i+1:] = 0
-            slices[i,:,:,:,:] = tmp
-        return slices
+        
+        if slice_dim == 0:
+            for i in range (0,n_slices):
+                tmp = deepcopy(stack_image)
+                tmp[:,:,:i,:,:] = 0
+                tmp[:,:,i+1:,:,:] = 0
+                slices[i,:,:,:,:] = tmp
+        elif slice_dim == 1:
+            for i in range (0,n_slices):
+                tmp = deepcopy(stack_image)
+                tmp[:,:,:,:i,:] = 0
+                tmp[:,:,:,i+1:,:] = 0
+                slices[i,:,:,:,:] = tmp
+        elif slice_dim == 2:
+            for i in range (0,n_slices):
+                tmp = deepcopy(stack_image)
+                tmp[:,:,:,:,:i] = 0
+                tmp[:,:,:,:,i+1:] = 0
+                slices[i,:,:,:,:] = tmp
+        return slices, n_slices
 
     def create_common_volume(self):
         """
@@ -268,8 +284,11 @@ class SVR_optimizer():
         """
         models = list()
         #create model for each stack 
+        slices = list()
         for st in range (0,self.k):
-            n_slices = self.ground_truth[st]["image"].shape[-1]
+            slice_tmp, n_slices = self.construct_slices_from_stack(self.ground_truth[st])
+            slices.append(slice_tmp)
+            #n_slices = self.ground_truth[st]["image"].shape[-1]
             models.append(custom_models.Reconstruction(n_slices = n_slices, device = self.device))
         
         #resampling_model = custom_models.ResamplingToFixed()
@@ -278,7 +297,6 @@ class SVR_optimizer():
         loss = loss_module.RegistrationLoss(loss_fnc, self.device)
         
         loss_log = np.zeros((epochs,self.k,inner_epochs))
-        
         
         
         for epoch in range(0,epochs):
@@ -291,7 +309,7 @@ class SVR_optimizer():
                 model.to(self.device)
                 
                 #in batch first shape
-                slices_tmp = self.construct_slices_from_stack(self.ground_truth[st])
+                slices_tmp = slices[st]
                 
                 if opt_alg == "SGD":
                     optimizer = t.optim.SGD(model.parameters(), lr = lr)
@@ -336,6 +354,7 @@ class SVR_optimizer():
             
             #update common_volume
             self.fixed_image["image"] = t.sum(transformed_slices, dim = 0).unsqueeze(0)
+            self.fixed_image["image"] = self.fixed_image["image"] / self.k
             
             #for name, param in model.named_parameters():
                # if param.requires_grad:

@@ -21,22 +21,21 @@ def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
     
     # filenames = ["10_3T_nody_001.nii.gz",
-    #               "14_3T_nody_001.nii.gz"]
+    #                "14_3T_nody_001.nii.gz"]
     
     
     
     
     filenames = ["10_3T_nody_001.nii.gz",
-                  "10_3T_nody_002.nii.gz",
+                  
                   "14_3T_nody_001.nii.gz",
-                  "14_3T_nody_002.nii.gz",
+                 
                   "21_3T_nody_001.nii.gz",
-                  "21_3T_nody_002.nii.gz",
-                  "23_3T_nody_001.nii.gz",
-                  "23_3T_nody_002.nii.gz"]
+                  
+                  "23_3T_nody_001.nii.gz"]
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
-    pixdim = (1,1,1)
+    pixdim = (1.5,1.5,1.5)
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
@@ -47,8 +46,8 @@ def optimize():
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, filenames, file_mask,pixdim, device, mode = mode)
     
     epochs = 2
-    inner_epochs = 1
-    lr = 0.001
+    inner_epochs = 2
+    lr = 0.0001
     loss_fnc = "ncc"
     opt_alg = "Adam"
     
