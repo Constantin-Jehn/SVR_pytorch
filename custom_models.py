@@ -24,7 +24,7 @@ class Reconstruction(t.nn.Module):
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
     
-    def forward(self, im_slices, ground_meta, fixed_image_meta):
+    def forward(self, im_slices, ground_meta, fixed_image_meta, transform_to_fixed = True):
         
         
         resampler = monai.transforms.ResampleToMatch()
@@ -35,14 +35,16 @@ class Reconstruction(t.nn.Module):
             
         im_slices = self.affine_layer(im_slices, affines)
         
-        transformed_slices = im_slices
         
-        transformed_size = (self.n_slices,1) + tuple(fixed_image_meta["spatial_shape"])
-        transformed_slices = t.zeros(transformed_size)
-        
-        for sli in range(0,self.n_slices):
-            transformed_slices[sli,:,:,:,:], _ = resampler(im_slices[sli,:,:,:,:],src_meta = ground_meta, 
-                                          dst_meta = fixed_image_meta, padding_mode = "zeros")
+        if transform_to_fixed:
+            transformed_size = (self.n_slices,1) + tuple(fixed_image_meta["spatial_shape"])
+            transformed_slices = t.zeros(transformed_size)
+            
+            for sli in range(0,self.n_slices):
+                transformed_slices[sli,:,:,:,:], _ = resampler(im_slices[sli,:,:,:,:],src_meta = ground_meta, 
+                                              dst_meta = fixed_image_meta, padding_mode = "zeros")
+        else:
+            transformed_slices = im_slices
             
         return transformed_slices  
     

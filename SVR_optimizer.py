@@ -60,6 +60,7 @@ class SVR_optimizer():
         self.mode = mode
         
         self.crop_images(upsampling=True)
+        
         self.fixed_image = self.create_common_volume()
         add_channel = AddChanneld(keys=["image"])
         
@@ -262,6 +263,33 @@ class SVR_optimizer():
         return world_stack
     
     
+    def create_common_volume_registration(self):
+        stacks = self.load_stacks()
+        #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
+        
+        stacks[0]["image"] = stacks[0]["image"].unsqueeze(0)
+        fixed_meta = stacks[0]["image_meta_dict"]
+        common_image = stacks[0]["image"].unsqueeze(0)
+        
+        for st in range(1,self.k):
+            image = stacks[st]["image"].unsqueeze(0)
+            meta = stacks[st]["image_meta_dict"]
+            
+            model = custom_models.Reconstruction(n_slices = 1, device = self.device)
+            loss = loss_module.RegistrationLoss("ncc", self.device)
+            optimizer = t.optim.Adam(model.parameters(), lr = 0.01)
+            
+            for ep in range(0,3):
+                transformed = model(image.detach(), meta, fixed_meta)
+                transformed = transformed.to(self.device)
+                loss_tensor = loss(transformed, stacks[0])
+                loss_tensor.backward()
+                optimizer.step()
+            transformed = transformed.detach()
+            common_image = common_image + transformed
+        
+        return {"image":common_image.squeeze().unsqueeze(0), "image_meta_dict": fixed_meta}
+    
     def optimize_multiple_stacks(self, epochs:int, inner_epochs:int, lr, loss_fnc = "ncc", opt_alg = "Adam"):
         """
         Parameters
@@ -295,10 +323,11 @@ class SVR_optimizer():
         #resampling_model = custom_models.ResamplingToFixed()
         #resampling_model.to(self.device)
         
-        loss = loss_module.RegistrationLossElementwise(loss_fnc, self.device)
+        loss = loss_module.RegistrationLossLR(loss_fnc, self.device)
         
         loss_log = np.zeros((epochs,self.k,inner_epochs))
         
+        resampler = monai.transforms.ResampleToMatch()
         
         for epoch in range(0,epochs):
             self.initial_vol["image"] = t.zeros_like(self.fixed_image["image"])
@@ -331,12 +360,12 @@ class SVR_optimizer():
                     optimizer.zero_grad()
                     
                     timer = time.time()
-                    transformed_slices = model(slices_tmp.detach(), local_stack["image_meta_dict"], self.fixed_image["image_meta_dict"])
+                    transformed_slices = model(slices_tmp.detach(), local_stack["image_meta_dict"], self.fixed_image["image_meta_dict"],transform_to_fixed = False)
                     transformed_slices = transformed_slices.to(self.device)
                     print(f'forward pass. {time.time() - timer} s ')
                     
                     timer = time.time()
-                    loss_tensor = loss(transformed_slices, self.fixed_image)
+                    loss_tensor = loss(transformed_slices, self.ground_truth[st]["image_meta_dict"], self.fixed_image)
                     print(f'loss:  {time.time() - timer} s ')
                     #loss_stack.append(loss_tensor.item())
                     
@@ -355,7 +384,18 @@ class SVR_optimizer():
                 #update common_volume
                 transformed_slices = transformed_slices.detach()
                 
-                self.initial_vol["image"] = self.initial_vol["image"] + t.sum(transformed_slices, dim = 0).unsqueeze(0)
+                
+                #if loss was applied in hr
+                #self.initial_vol["image"] = self.initial_vol["image"] + t.sum(transformed_slices, dim = 0).unsqueeze(0)
+                
+                for sl in range(0,transformed_slices.shape[0]):
+                    sli = transformed_slices[sl,:,:,:,:]
+                    resampled, _ = resampler(sli, src_meta=self.ground_truth[st]["image_meta_dict"], dst_meta = self.fixed_image["image_meta_dict"])
+                    self.initial_vol["image"] = self.initial_vol["image"] + resampled.unsqueeze(0)
+                
+                
+                
+                
                 print('inital_updated')
                 
                 
@@ -370,7 +410,8 @@ class SVR_optimizer():
         #cast to image format
         self.fixed_image["image"] = t.squeeze(self.fixed_image["image"]).unsqueeze(0)
         
-        loss_log = 0 
+        loss_log = 0
+        
         return self.fixed_image, loss_log
 
 
