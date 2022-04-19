@@ -18,6 +18,7 @@ import torch as t
 from copy import deepcopy
 import loss_module
 import time
+import matplotlib.pyplot as plt
 
 
 class SVR_optimizer():
@@ -69,7 +70,7 @@ class SVR_optimizer():
         print("fixed_image_generated")
         
         
-        self.initial_vol = {"image": deepcopy(self.fixed_image["image"]), "image_meta_dict": deepcopy(self.fixed_image["image_meta_dict"])}
+        self.initial_vol = {"image": t.zeros_like(self.fixed_image["image"]), "image_meta_dict": deepcopy(self.fixed_image["image_meta_dict"])}
         self.initial_vol = to_device(self.initial_vol)
         
         self.crop_images(upsampling = False)
@@ -294,13 +295,18 @@ class SVR_optimizer():
         #resampling_model = custom_models.ResamplingToFixed()
         #resampling_model.to(self.device)
         
-        loss = loss_module.RegistrationLoss(loss_fnc, self.device)
+        loss = loss_module.RegistrationLossElementwise(loss_fnc, self.device)
         
         loss_log = np.zeros((epochs,self.k,inner_epochs))
         
         
         for epoch in range(0,epochs):
+            self.initial_vol["image"] = t.zeros_like(self.fixed_image["image"])
+
             print(f'\n\n Epoch: {epoch}')
+            
+            #plt.imshow(self.fixed_image["image"][0,0,:,:,20].detach().numpy())
+            #plt.show()
             
             for st in range(0,self.k):
                 #loss_stack = list()
@@ -337,10 +343,6 @@ class SVR_optimizer():
                     #here stack[st] is in coordinates of fixed image
                     #print(f'Epoch: {epoch} loss: {loss_tensor.item()}')
                     timer = time.time()
-                    if inner_epoch == (inner_epochs - 1) :
-                        rt_graph = False
-                    else:
-                        rt_graph = True
                     
                     loss_tensor.backward(retain_graph = False)
                     print(f'backward:  {time.time() - timer} s ')
@@ -350,11 +352,16 @@ class SVR_optimizer():
                     optimizer.step()
                     print(f'optimizer:  {time.time() - timer} s ')
 
-            transformed_slices = transformed_slices.detach()
+                #update common_volume
+                transformed_slices = transformed_slices.detach()
+                
+                self.initial_vol["image"] = self.initial_vol["image"] + t.sum(transformed_slices, dim = 0).unsqueeze(0)
+                print('inital_updated')
+                
+                
+            self.initial_vol["image"] = t.div(self.initial_vol["image"],self.k)
             
-            #update common_volume
-            self.fixed_image["image"] = t.sum(transformed_slices, dim = 0).unsqueeze(0)
-            self.fixed_image["image"] = self.fixed_image["image"] / self.k
+            self.fixed_image["image"] = self.initial_vol["image"]
             
             #for name, param in model.named_parameters():
                # if param.requires_grad:

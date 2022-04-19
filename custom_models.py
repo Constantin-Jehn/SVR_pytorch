@@ -35,12 +35,14 @@ class Reconstruction(t.nn.Module):
             
         im_slices = self.affine_layer(im_slices, affines)
         
+        transformed_slices = im_slices
+        
         transformed_size = (self.n_slices,1) + tuple(fixed_image_meta["spatial_shape"])
         transformed_slices = t.zeros(transformed_size)
         
         for sli in range(0,self.n_slices):
             transformed_slices[sli,:,:,:,:], _ = resampler(im_slices[sli,:,:,:,:],src_meta = ground_meta, 
-                                         dst_meta = fixed_image_meta, padding_mode = "zeros")
+                                          dst_meta = fixed_image_meta, padding_mode = "zeros")
             
         return transformed_slices  
     
