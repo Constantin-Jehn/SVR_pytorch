@@ -194,6 +194,32 @@ class SVR_optimizer():
             stack_list.append(stack_dict)
         return stack_list
     
+    
+    def create_common_volume(self):
+        """
+        Combine updated local stacks that are in common coordinate system, to 
+        one superpositioned volume
+
+        Returns
+        -------
+        world_stack : dictionary
+            contains nifti file of the the reconstructed brain.
+
+        """
+        stacks = self.load_stacks()
+        to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
+        tmp = t.zeros_like(stacks[0]["image"])
+        
+        
+        for st in range(1,self.k):
+            tmp = tmp + stacks[st]["image"]
+        tmp = tmp/self.k
+        world_stack = {"image":tmp, "image_meta_dict": stacks[0]["image_meta_dict"]}
+        world_stack = to_device(world_stack)
+        return world_stack
+    
+    
+    
     def construct_slices_from_stack(self, stack):
         """
         Constructs slices from a single stack
@@ -239,28 +265,7 @@ class SVR_optimizer():
                 slices[i,:,:,:,:] = tmp
         return slices, n_slices
 
-    def create_common_volume(self):
-        """
-        Combine updated local stacks that are in common coordinate system, to 
-        one superpositioned volume
 
-        Returns
-        -------
-        world_stack : dictionary
-            contains nifti file of the the reconstructed brain.
-
-        """
-        stacks = self.load_stacks()
-        to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        tmp = t.zeros_like(stacks[0]["image"])
-        
-        
-        for st in range(1,self.k):
-            tmp = tmp + stacks[st]["image"]
-        tmp = tmp/self.k
-        world_stack = {"image":tmp, "image_meta_dict": stacks[0]["image_meta_dict"]}
-        world_stack = to_device(world_stack)
-        return world_stack
     
     
     def create_common_volume_registration(self):
@@ -392,10 +397,7 @@ class SVR_optimizer():
                     sli = transformed_slices[sl,:,:,:,:]
                     resampled, _ = resampler(sli, src_meta=self.ground_truth[st]["image_meta_dict"], dst_meta = self.fixed_image["image_meta_dict"])
                     self.initial_vol["image"] = self.initial_vol["image"] + resampled.unsqueeze(0)
-                
-                
-                
-                
+
                 print('inital_updated')
                 
                 
