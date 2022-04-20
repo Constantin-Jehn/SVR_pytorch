@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 
 
 class SVR_optimizer():
-    def __init__(self,src_folder, prep_folder, stack_filenames, mask_filename, pixdim, device, mode):
+    def __init__(self,src_folder, prep_folder, stack_filenames, mask_filename, pixdims, device, mode):
         """
         constructer of SVR_optimizer class
         Parameters
@@ -36,7 +36,7 @@ class SVR_optimizer():
         mask_filename : string
             nifti filename to crop input images
         pixdim : list
-            DESCRIPTION.
+            list of pixdims with increasing resolution
         device : TYPE
             DESCRIPTION.
         mode : string
@@ -56,22 +56,22 @@ class SVR_optimizer():
         
         self.k = len(self.stack_filenames)
         self.mask_filename = mask_filename
-        self.pixdim = pixdim
+        self.pixdims = pixdims
         self.mode = mode
+
         
-        self.crop_images(upsampling=True)
-        
-        self.fixed_image = self.create_common_volume()
+        self.fixed_images = self.create_multiresolution_fixed_images(pixdims)
         add_channel = AddChanneld(keys=["image"])
-        
         to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        self.fixed_image = add_channel(self.fixed_image)
-        self.fixed_image["image"].requires_grad = False
-        self.fixed_image = to_device(self.fixed_image)
-        print("fixed_image_generated")
+        
+        for i in range(0,len(self.fixed_images)):
+            self.fixed_images[i] = add_channel(self.fixed_images[i])
+            self.fixed_images[i]["image"].requires_grad = False
+            self.fixed_images[i] = to_device(self.fixed_images[i])
+        print("fixed_images_generated")
         
         
-        self.initial_vol = {"image": t.zeros_like(self.fixed_image["image"]), "image_meta_dict": deepcopy(self.fixed_image["image_meta_dict"])}
+        self.initial_vol = {"image": t.zeros_like(self.fixed_images[0]["image"]), "image_meta_dict": deepcopy(self.fixed_images[0]["image_meta_dict"])}
         self.initial_vol = to_device(self.initial_vol)
         
         self.crop_images(upsampling = False)
@@ -81,7 +81,7 @@ class SVR_optimizer():
         #self.ground_truth, self.im_slices, self.target_dict, self.k = self.preprocess()
 
 
-    def crop_images(self, upsampling = False):
+    def crop_images(self, upsampling = False, pixdim = 0):
         """
         Parameters
         ----------
@@ -125,8 +125,8 @@ class SVR_optimizer():
             
             if upsampling:
                 if i == 0:
-                    #only upsample first stack, for remaining stack it'd done by resamplich to this stack
-                    upsampler = tio.transforms.Resample(self.pixdim)
+                    #only upsample first stack, for remaining stack it's done by resamplich to this stack
+                    upsampler = tio.transforms.Resample(pixdim)
                     cropped_stack = upsampler(cropped_stack)
                 else:
                     path_stack = os.path.join(self.prep_folder, self.stack_filenames[0])
@@ -136,30 +136,6 @@ class SVR_optimizer():
             path_dst = os.path.join(self.prep_folder, filename)
             cropped_stack.stack.save(path_dst)
             
-        
-        #create a common place for the reconstruction
-        common_image = tio.Image(tensor = t.zeros((1,100,100,100)))
-        path_dst = os.path.join(self.prep_folder, "world.nii.gz")
-        common_image.save(path_dst)
-    
-    def resample_to_pixdim(self):
-        """
-        After cropping and having saved the ground truth image, bring the images
-        to desired resolution for reconstruction
-
-        Returns
-        -------
-        None.
-        """
-        resampler = tio.transforms.Resample(self.pixdim)
-        
-        for i in range(0,self.k):
-            filename = self.stack_filenames[i]
-            path_stack = os.path.join(self.prep_folder, filename)
-            stack = tio.ScalarImage(path_stack)
-            resampled_stack = resampler(stack)
-            path_dst = os.path.join(self.prep_folder, filename)
-            resampled_stack.save(path_dst)    
     
     
     def load_stacks(self, to_device = False):
@@ -216,9 +192,35 @@ class SVR_optimizer():
         tmp = tmp/self.k
         world_stack = {"image":tmp, "image_meta_dict": stacks[0]["image_meta_dict"]}
         world_stack = to_device(world_stack)
+        
         return world_stack
     
-    
+    def create_multiresolution_fixed_images(self, pixdims):
+        """
+        Parameters
+        ----------
+        pixdims : list
+            different resolution where first is coarsest
+
+        Returns
+        -------
+        fixed_images : list
+            contains initial fixed images, only 0th will be used in the optimization
+            the rest will be used as template for each resolution
+
+        """
+        n_pixdims = len(pixdims)
+        fixed_images = list()
+        
+        for i in range(0,n_pixdims):
+            self.crop_images(upsampling=True, pixdim = pixdims[i])
+            fixed_image = self.create_common_volume()
+            fixed_images.append(fixed_image)
+            
+        return fixed_images
+        
+        
+        
     
     def construct_slices_from_stack(self, stack):
         """
