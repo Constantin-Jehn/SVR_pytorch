@@ -13,6 +13,22 @@ class RegistrationLoss(t.nn.Module):
         self.device = device
 
     def forward(self, im_slices, fixed_image):
+        """
+        
+
+        Parameters
+        ----------
+        im_slices : tensor
+            slices from one stack
+        fixed_image : dict
+            current_fixed image
+
+        Returns
+        -------
+        loss : TYPE
+            DESCRIPTION.
+
+        """
         n_slices = len(im_slices)
 
         fixed_image_image = fixed_image["image"].to(self.device)
@@ -23,14 +39,15 @@ class RegistrationLoss(t.nn.Module):
             
             relevant_indices = t.nonzero(im_slices[sl,:,:,:,:], as_tuple = True)
             
-            min_ind = t.tensor([t.min(relevant_indices[i]).item() for i in range(len(relevant_indices))])
-            max_ind = t.tensor([t.max(relevant_indices[i]).item() for i in range(len(relevant_indices))])
-            
-            pred = im_slices[sl, min_ind[0]:max_ind[0] + 1, min_ind[1]:max_ind[1] + 1, min_ind[2]:max_ind[2] + 1 ,min_ind[3]:max_ind[3] + 1].unsqueeze(0)
-            target = fixed_image_image[0, min_ind[0]:max_ind[0] + 1, min_ind[1]:max_ind[1] + 1, min_ind[2]:max_ind[2] + 1 ,min_ind[3]:max_ind[3] + 1].unsqueeze(0)
-            
-            #print(f'pred: {str(pred.device)}, target: {str(target.device)}, loss: {str(loss.device)}')
-            loss = loss + self.monai_loss(pred, target)
+            if len(relevant_indices[0]) > 0:
+                min_ind = t.tensor([t.min(relevant_indices[i]).item() for i in range(len(relevant_indices))])
+                max_ind = t.tensor([t.max(relevant_indices[i]).item() for i in range(len(relevant_indices))])
+                
+                pred = im_slices[sl, min_ind[0]:max_ind[0] + 1, min_ind[1]:max_ind[1] + 1, min_ind[2]:max_ind[2] + 1 ,min_ind[3]:max_ind[3] + 1].unsqueeze(0)
+                target = fixed_image_image[0, min_ind[0]:max_ind[0] + 1, min_ind[1]:max_ind[1] + 1, min_ind[2]:max_ind[2] + 1 ,min_ind[3]:max_ind[3] + 1].unsqueeze(0)
+                
+                #print(f'pred: {str(pred.device)}, target: {str(target.device)}, loss: {str(loss.device)}')
+                loss = loss + self.monai_loss(pred, target)
             
         return loss
 

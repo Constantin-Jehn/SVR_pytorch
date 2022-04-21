@@ -19,6 +19,7 @@ from copy import deepcopy
 import loss_module
 import time
 import matplotlib.pyplot as plt
+from torchviz import make_dot
 
 
 class SVR_optimizer():
@@ -56,7 +57,6 @@ class SVR_optimizer():
         
         self.k = len(self.stack_filenames)
         self.mask_filename = mask_filename
-        self.pixdims = pixdims
         self.mode = mode
 
         
@@ -218,10 +218,7 @@ class SVR_optimizer():
             fixed_images.append(fixed_image)
             
         return fixed_images
-        
-        
-        
-    
+
     def construct_slices_from_stack(self, stack):
         """
         Constructs slices from a single stack
@@ -330,14 +327,26 @@ class SVR_optimizer():
         #resampling_model = custom_models.ResamplingToFixed()
         #resampling_model.to(self.device)
         
-        loss = loss_module.RegistrationLossLR(loss_fnc, self.device)
+        loss = loss_module.RegistrationLoss(loss_fnc, self.device)
+    
         
         loss_log = np.zeros((epochs,self.k,inner_epochs))
         
-        resampler = monai.transforms.ResampleToMatch()
+        resampler = monai.transforms.ResampleToMatch(mode = self.mode)
+        
+        common_volume = t.zeros_like(self.fixed_images[0]["image"])
         
         for epoch in range(0,epochs):
-            self.initial_vol["image"] = t.zeros_like(self.fixed_image["image"])
+            fixed_image = self.fixed_images[epoch]
+            if epoch > 0:
+                common_volume = common_volume.squeeze().unsqueeze(0)
+                fixed_image["image"],_ = resampler(common_volume,src_meta=self.fixed_images[epoch - 1]["image_meta_dict"],
+                                                 dst_meta = fixed_image["image_meta_dict"])
+                
+                fixed_image["image"] = fixed_image["image"].unsqueeze(0)
+                common_volume = t.zeros_like(fixed_image["image"])
+            
+            #self.initial_vol["image"] = t.zeros_like(self.fixed_image["image"])
 
             print(f'\n\n Epoch: {epoch}')
             
@@ -367,20 +376,22 @@ class SVR_optimizer():
                     optimizer.zero_grad()
                     
                     timer = time.time()
-                    transformed_slices = model(slices_tmp.detach(), local_stack["image_meta_dict"], self.fixed_image["image_meta_dict"],transform_to_fixed = False)
+                    transformed_slices = model(slices_tmp.detach(), local_stack["image_meta_dict"], fixed_image["image_meta_dict"], transform_to_fixed = True, mode = self.mode)
                     transformed_slices = transformed_slices.to(self.device)
                     print(f'forward pass. {time.time() - timer} s ')
                     
-                    timer = time.time()
-                    loss_tensor = loss(transformed_slices, self.ground_truth[st]["image_meta_dict"], self.fixed_image)
-                    print(f'loss:  {time.time() - timer} s ')
-                    #loss_stack.append(loss_tensor.item())
+                    dot = make_dot(transformed_slices[0,:,:,:,:], params = dict(model.named_parameters()))
                     
-                    #here stack[st] is in coordinates of fixed image
-                    #print(f'Epoch: {epoch} loss: {loss_tensor.item()}')
+                    timer = time.time()
+                    loss_tensor = loss(transformed_slices, fixed_image)
+                    
+                    print(f'loss:  {time.time() - timer} s ')
+                    
+                    print(f'Epoch: {epoch} loss: {loss_tensor.item()}')
                     timer = time.time()
                     
                     loss_tensor.backward(retain_graph = False)
+                    
                     print(f'backward:  {time.time() - timer} s ')
                     print(f'loss: {loss_tensor.item()}')
                     loss_log[epoch,st,inner_epoch] = loss_tensor
@@ -393,30 +404,31 @@ class SVR_optimizer():
                 
                 
                 #if loss was applied in hr
-                #self.initial_vol["image"] = self.initial_vol["image"] + t.sum(transformed_slices, dim = 0).unsqueeze(0)
+                common_volume = common_volume + t.sum(transformed_slices, dim = 0).unsqueeze(0)
                 
-                for sl in range(0,transformed_slices.shape[0]):
-                    sli = transformed_slices[sl,:,:,:,:]
-                    resampled, _ = resampler(sli, src_meta=self.ground_truth[st]["image_meta_dict"], dst_meta = self.fixed_image["image_meta_dict"])
-                    self.initial_vol["image"] = self.initial_vol["image"] + resampled.unsqueeze(0)
+                # for sl in range(0,transformed_slices.shape[0]):
+                #     sli = transformed_slices[sl,:,:,:,:]
+                #     resampled, _ = resampler(sli, src_meta=self.ground_truth[st]["image_meta_dict"], dst_meta = self.fixed_image["image_meta_dict"])
+                #     self.initial_vol["image"] = self.initial_vol["image"] + resampled.unsqueeze(0)
 
                 print('inital_updated')
                 
                 
-            self.initial_vol["image"] = t.div(self.initial_vol["image"],self.k)
+            common_volume = t.div(common_volume, self.k)
             
-            self.fixed_image["image"] = self.initial_vol["image"]
+            #self.fixed_image["image"] = self.initial_vol["image"]
             
-            #for name, param in model.named_parameters():
-               # if param.requires_grad:
-                    #print (f'parameter {name} has value not equal to zero: {t.all(param.data == 0)}')
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    print (f'parameter {name} has value not equal to zero: {t.all(param.data == 0)}')
             
         #cast to image format
-        self.fixed_image["image"] = t.squeeze(self.fixed_image["image"]).unsqueeze(0)
+        fixed_image["image"] = common_volume
+        fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
         
-        loss_log = 0
+        #loss_log = 0
         
-        return self.fixed_image, loss_log
+        return fixed_image, loss_log
 
 
     def bending_loss_fucntion_single_stack(target_dict_image):

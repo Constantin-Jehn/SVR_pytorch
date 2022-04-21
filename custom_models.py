@@ -11,7 +11,12 @@ from monai.transforms import (
     ToTensord,
     RandAffine
 )
+from monai.transforms.utils import (
+    create_rotate,
+    create_translate
+    )
 from copy import deepcopy
+import pytorch3d as p3d
 
 
 class Reconstruction(t.nn.Module):
@@ -24,10 +29,10 @@ class Reconstruction(t.nn.Module):
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
     
-    def forward(self, im_slices, ground_meta, fixed_image_meta, transform_to_fixed = True):
+    def forward(self, im_slices, ground_meta, fixed_image_meta, transform_to_fixed = True, mode = "bilinear"):
         
         
-        resampler = monai.transforms.ResampleToMatch()
+        resampler = monai.transforms.ResampleToMatch(mode = mode )
         
         affines = self.create_T(self.rotations[0], self.translations[0]).unsqueeze(0)
         for sli in range(1,self.n_slices):
@@ -48,37 +53,8 @@ class Reconstruction(t.nn.Module):
             
         return transformed_slices  
     
-    def rotation_matrix(self, angles):
-        """
-        Returns a rotation matrix for given angles.
-        Own implementation to assure the possibility of a computational graph
-        for update of parameters
+    
 
-        Parameters
-        ----------
-        angles : list
-            desired angles in radian
-
-        Returns
-        -------
-        torch.tensor
-            rotation matrix
-
-        """
-        s = t.sin(angles)
-        c = t.cos(angles)
-        rot_x = t.cat((t.tensor([1,0,0]),
-                      t.tensor([0,c[0],-s[0]]),
-                      t.tensor([0,s[0],c[0]])), dim = 0).reshape(3,3)
-        
-        rot_y = t.cat((t.tensor([c[1],0,s[1]]),
-                      t.tensor([0,1,0]),
-                      t.tensor([-s[1],0,c[1]])),dim = 0).reshape(3,3)
-        
-        rot_z = t.cat((t.tensor([c[2],-s[2],0]),
-                      t.tensor([s[2],c[2],0]),
-                      t.tensor([0,0,1])), dim = 0).reshape(3,3)
-        return t.matmul(t.matmul(rot_z, rot_y),rot_x)
         
 
     def create_T(self,rotations, translations):
@@ -95,10 +71,10 @@ class Reconstruction(t.nn.Module):
             DESCRIPTION.
 
         """
-        rotation = self.rotation_matrix(rotations).to(self.device)
-        bottom = t.tensor([0,0,0,1],device = self.device)
-        trans = t.cat((rotation,translations.unsqueeze(1)),dim=1).to(self.device)
-        T = t.cat((trans,bottom.unsqueeze(0)),dim = 0)
+        #rotation = self.rotation_matrix(rotations).to(self.device)
+        rotation_tensor = monai.transforms.utils.create_rotate(3, rotations, device = self.device,  backend="torch")
+        translation_tensor = monai.transforms.utils.create_translate(3, translations, device = self.device, backend="torch")
+        T = t.matmul(rotation_tensor,translation_tensor)
         return T
             
         
