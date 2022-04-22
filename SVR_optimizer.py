@@ -23,7 +23,7 @@ from torchviz import make_dot
 
 
 class SVR_optimizer():
-    def __init__(self,src_folder, prep_folder, stack_filenames, mask_filename, pixdims, device, mode):
+    def __init__(self, src_folder, prep_folder, stack_filenames, mask_filename, pixdims, device, mode):
         """
         constructer of SVR_optimizer class
         Parameters
@@ -49,6 +49,7 @@ class SVR_optimizer():
 
         """
         timer = time.time()
+        
         self.device = device
         print(f'Program runs on: {self.device}')
         self.src_folder = src_folder
@@ -59,12 +60,10 @@ class SVR_optimizer():
         self.mask_filename = mask_filename
         self.mode = mode
 
-        
-        
         add_channel = AddChanneld(keys=["image"])
         to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         
-        self.fixed_images = self.create_common_volume()
+        self.fixed_images = self.create_common_volume_registation()
         self.fixed_images = add_channel(self.fixed_images)
         
         #self.fixed_images = self.create_multiresolution_fixed_images(pixdims)
