@@ -30,17 +30,14 @@ class Reconstruction(t.nn.Module):
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
     
     def forward(self, im_slices, ground_meta, fixed_image_meta, transform_to_fixed = True, mode = "bilinear"):
-        
-        
-        resampler = monai.transforms.ResampleToMatch(mode = mode )
+        resampler = monai.transforms.ResampleToMatch(mode = mode)
         
         affines = self.create_T(self.rotations[0], self.translations[0]).unsqueeze(0)
         for sli in range(1,self.n_slices):
             affines = t.cat((affines,self.create_T(self.rotations[sli], self.translations[sli]).unsqueeze(0)),0)
             
         im_slices = self.affine_layer(im_slices, affines)
-        
-        
+
         if transform_to_fixed:
             transformed_size = (self.n_slices,1) + tuple(fixed_image_meta["spatial_shape"])
             transformed_slices = t.zeros(transformed_size)
@@ -52,10 +49,6 @@ class Reconstruction(t.nn.Module):
             transformed_slices = im_slices
             
         return transformed_slices  
-    
-    
-
-        
 
     def create_T(self,rotations, translations):
         """

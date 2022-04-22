@@ -60,19 +60,25 @@ class SVR_optimizer():
         self.mode = mode
 
         
-        self.fixed_images = self.create_multiresolution_fixed_images(pixdims)
+        
         add_channel = AddChanneld(keys=["image"])
         to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         
-        for i in range(0,len(self.fixed_images)):
-            self.fixed_images[i] = add_channel(self.fixed_images[i])
-            self.fixed_images[i]["image"].requires_grad = False
-            self.fixed_images[i] = to_device(self.fixed_images[i])
+        self.fixed_images = self.create_common_volume()
+        self.fixed_images = add_channel(self.fixed_images)
+        
+        #self.fixed_images = self.create_multiresolution_fixed_images(pixdims)
+        # for i in range(0,len(self.fixed_images)):
+        #     self.fixed_images[i] = add_channel(self.fixed_images[i])
+        #     self.fixed_images[i]["image"].requires_grad = False
+        #     self.fixed_images[i] = to_device(self.fixed_images[i])
+       
+        
+        
+        # self.initial_vol = {"image": t.zeros_like(self.fixed_images[0]["image"]), "image_meta_dict": deepcopy(self.fixed_images[0]["image_meta_dict"])}
+        # self.initial_vol = to_device(self.initial_vol)
         print("fixed_images_generated")
         
-        
-        self.initial_vol = {"image": t.zeros_like(self.fixed_images[0]["image"]), "image_meta_dict": deepcopy(self.fixed_images[0]["image_meta_dict"])}
-        self.initial_vol = to_device(self.initial_vol)
         
         self.crop_images(upsampling = False)
         #remains in initial coordiate system
@@ -182,13 +188,17 @@ class SVR_optimizer():
             contains nifti file of the the reconstructed brain.
 
         """
+        resampler = monai.transforms.ResampleToMatch(mode = self.mode)
+        
         stacks = self.load_stacks()
         to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        tmp = t.zeros_like(stacks[0]["image"])
+        tmp = stacks[0]["image"]
         
         
         for st in range(1,self.k):
-            tmp = tmp + stacks[st]["image"]
+            image,_ = resampler(stacks[st]["image"], src_meta=stacks[st]["image_meta_dict"], 
+                              dst_meta=stacks[0]["image_meta_dict"])
+            tmp = tmp + image
         tmp = tmp/self.k
         world_stack = {"image":tmp, "image_meta_dict": stacks[0]["image_meta_dict"]}
         world_stack = to_device(world_stack)
@@ -214,7 +224,7 @@ class SVR_optimizer():
         
         for i in range(0,n_pixdims):
             self.crop_images(upsampling=True, pixdim = pixdims[i])
-            fixed_image = self.create_common_volume()
+            fixed_image = self.create_common_volume_registration()
             fixed_images.append(fixed_image)
             
         return fixed_images
@@ -237,9 +247,7 @@ class SVR_optimizer():
         add_channel = AddChanneld(keys=["image"])
         stack = add_channel(stack)
         stack_image = stack["image"]
-        
-        
-        
+
         slice_dim, n_slices = list(stack_image.shape[2:]).index(min(list(stack_image.shape[2:]))),  min(list(stack_image.shape[2:]))
         
         slices = t.zeros_like(stack_image).repeat(n_slices,1,1,1,1)
@@ -281,9 +289,9 @@ class SVR_optimizer():
             
             model = custom_models.Reconstruction(n_slices = 1, device = self.device)
             loss = loss_module.RegistrationLoss("ncc", self.device)
-            optimizer = t.optim.Adam(model.parameters(), lr = 0.01)
+            optimizer = t.optim.Adam(model.parameters(), lr = 0.001)
             
-            for ep in range(0,3):
+            for ep in range(0,15):
                 transformed = model(image.detach(), meta, fixed_meta)
                 transformed = transformed.to(self.device)
                 loss_tensor = loss(transformed, stacks[0])

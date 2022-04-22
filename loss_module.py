@@ -33,7 +33,7 @@ class RegistrationLoss(t.nn.Module):
 
         fixed_image_image = fixed_image["image"].to(self.device)
         
-        loss = t.zeros(1, device = self.device)
+        loss = t.zeros(1, requires_grad=True, device = self.device)
         
         for sl in range(0,n_slices):
             
