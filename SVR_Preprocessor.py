@@ -21,7 +21,7 @@ import time
 import SimpleITK as sitk
 
 
-class SVR_Preprocesser():
+class Preprocesser():
     def __init__(self, src_folder, prep_folder, stack_filenames, mask_filename, pixdims, device, mode):
         self.device = device
         self.src_folder = src_folder
@@ -30,28 +30,36 @@ class SVR_Preprocesser():
         self.k = len(self.stack_filenames)
         self.mask_filename = mask_filename
         self.mode = mode
-        
-        add_channel = AddChanneld(keys=["image"])
+    
+    def preprocess_stacks_and_common_vol(self, save_intermediates = False):
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         self.crop_images(upsampling = False)
         #load cropped stacks
         stacks = self.load_stacks(to_device=True)
         #denoise stacks
         stacks = self.denoising(stacks)
-        
-        stacks = self.save_stacks(stacks,'den')
+        if save_intermediates:
+            stacks = self.save_stacks(stacks,'den')
         #self.bias_correction_sitk(stacks)
-        self.fixed_images,stacks = self.create_common_volume_registration(stacks)
-        # for st in range(0,self.k):
-        #     stacks[st] = add_channel(stacks[st])
-        #stacks = self.save_stacks(stacks,'reg')
+        fixed_images, stacks = self.create_common_volume_registration(stacks)
         
-        self.fixed_images, stacks = self.histogram_normalize(self.fixed_images,stacks)
-        
-        stacks = self.save_stacks(stacks,'norm')
-        
-        
+        if save_intermediates:
+            stacks = self.save_stacks(stacks,'reg')
+            
+        fixed_images, stacks = self.histogram_normalize(fixed_images,stacks)
+        if save_intermediates:
+            stacks = self.save_stacks(stacks,'norm')
         # self.fixed_images = add_channel(self.fixed_images)
+        for st in range(0,len(stacks)):
+            stacks[st]["image"] = stacks[st]["image"].squeeze().unsqueeze(0)
+        #fixed_images["image"] = fixed_images["image"].squeeze().unsqueeze(0)
+        return fixed_images, stacks
+    
+    def get_cropped_stacks(self):
+        self.crop_images(upsampling = False)
+        #load cropped stacks
+        stacks = self.load_stacks(to_device=True)
+        return stacks
         
     def crop_images(self, upsampling = False, pixdim = 0):
         """
@@ -140,6 +148,17 @@ class SVR_Preprocesser():
         return stack_list
     
     def denoising(self, stacks):
+        """
+        Applies Gaussian Sharpen Filter to all stacks
+
+        Parameters
+        ----------
+        stacks : list
+
+        Returns
+        -------
+        stacks : list
+        """
         gauss_sharpen = monai.transforms.GaussianSharpen(sigma1=1, sigma2 = 1, alpha = 3)
         for st in range(0,self.k):
             stacks[st]["image"] = gauss_sharpen(stacks[st]["image"]) 
@@ -155,6 +174,21 @@ class SVR_Preprocesser():
             sitk.WriteImage(denoised_image,path)
     
     def create_common_volume_registration(self, stacks):
+        """
+        creates common volume and return registered stacks
+
+        Parameters
+        ----------
+        stacks : list
+
+        Returns
+        -------
+        dict
+            common volume
+        stacks : list
+            registered stacks
+
+        """
         folder = "preprocessing"
         path = os.path.join(folder)
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
@@ -176,21 +210,36 @@ class SVR_Preprocesser():
                 loss_tensor = loss(transformed, stacks[0])
                 loss_tensor.backward()
                 optimizer.step()
+                
             transformed = transformed.detach()
             
             common_image = common_image + transformed
             
-            stacks[st]["image"],stacks[st]["image_meta_dict"] = transformed, fixed_meta
+            stacks[st]["image"],stacks[st]["image_meta_dict"]["affine"], stacks[st]["image_meta_dict"]["spatial_shape"] = transformed, fixed_meta["affine"], fixed_meta["spatial_shape"]
         
         return {"image":common_image.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta},stacks
     
     def histogram_normalize(self, fixed_images, stacks):
-        
+        """
+        Applies histogram normalization to common volume and alls stacks
+        Parameters
+        ----------
+        fixed_images : dict
+            common_volume
+        stacks : list
+            DESCRIPTION.
+
+        Returns
+        -------
+        fixed_images : dict
+
+        stacks : list
+        """
         add_channel = AddChanneld(keys=["image"])
         loader = LoadImaged(keys = ["image"])
         to_tensor = ToTensord(keys = ["image"])
         resampler = monai.transforms.ResampleToMatch(mode = "bilinear")
-        normalizer = monai.transforms.HistogramNormalize()
+        normalizer = monai.transforms.HistogramNormalize(num_bins = 256)
         
         path_mask = os.path.join(self.src_folder, self.mask_filename)
         mask_dict = {"image": path_mask}
@@ -220,13 +269,9 @@ class SVR_Preprocesser():
                                             resample = False, mode = self.mode, padding_mode = "zeros",
                                             separate_folder=False)
         
-        for st in range(0,self.k):
+        for st in range(0,len(stacks)):
             nifti_saver.save(stacks[st]["image"].squeeze().unsqueeze(0), meta_data=stacks[st]["image_meta_dict"])
-            filename = self.stack_filenames[st][:-7] + "_reg" + ".nii.gz"
-            stacks[st]["image_meta_dict"]["filename_or_obj"] = os.path.join(folder, filename) 
     
         return stacks
     
-
-                
-            
+       

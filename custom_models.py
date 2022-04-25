@@ -39,6 +39,7 @@ class Reconstruction(t.nn.Module):
         im_slices = self.affine_layer(im_slices, affines)
 
         if transform_to_fixed:
+            
             transformed_size = (self.n_slices,1) + tuple(fixed_image_meta["spatial_shape"])
             transformed_slices = t.zeros(transformed_size)
             
