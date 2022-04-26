@@ -59,6 +59,8 @@ class Preprocesser():
         self.crop_images(upsampling = False)
         #load cropped stacks
         stacks = self.load_stacks(to_device=True)
+        
+        
         return stacks
         
     def crop_images(self, upsampling = False, pixdim = 0):
@@ -205,19 +207,22 @@ class Preprocesser():
             optimizer = t.optim.Adam(model.parameters(), lr = 0.001)
             
             for ep in range(0,15):
-                transformed = model(image.detach(), meta, fixed_meta)
+                transformed = model(image.detach(), meta, fixed_meta, transform_to_fixed = True)
                 transformed = transformed.to(self.device)
                 loss_tensor = loss(transformed, stacks[0])
                 loss_tensor.backward()
-                optimizer.step()
+                if ep < 14:
+                    optimizer.step()
                 
             transformed = transformed.detach()
             
             common_image = common_image + transformed
             
-            stacks[st]["image"],stacks[st]["image_meta_dict"]["affine"], stacks[st]["image_meta_dict"]["spatial_shape"] = transformed, fixed_meta["affine"], fixed_meta["spatial_shape"]
+            #stacks[st]["image"],stacks[st]["image_meta_dict"]["affine"], stacks[st]["image_meta_dict"]["spatial_shape"] = transformed, fixed_meta["affine"], fixed_meta["spatial_shape"]
+            pre_registered  = model(stacks[st]["image"].unsqueeze(0), meta, fixed_meta, transform_to_fixed = False)
+            stacks[st]["image"] = pre_registered
         
-        return {"image":common_image.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta},stacks
+        return {"image":common_image.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta}, stacks
     
     def histogram_normalize(self, fixed_images, stacks):
         """
@@ -239,7 +244,7 @@ class Preprocesser():
         loader = LoadImaged(keys = ["image"])
         to_tensor = ToTensord(keys = ["image"])
         resampler = monai.transforms.ResampleToMatch(mode = "bilinear")
-        normalizer = monai.transforms.HistogramNormalize(num_bins = 256)
+        normalizer = monai.transforms.HistogramNormalize(max = 2048, num_bins = 2048)
         
         path_mask = os.path.join(self.src_folder, self.mask_filename)
         mask_dict = {"image": path_mask}
@@ -256,8 +261,18 @@ class Preprocesser():
         
         fixed_images["image"] = normalizer(fixed_images["image"],mask["image"])
         
+        mask["image"] = mask["image"].squeeze().unsqueeze(0)
+        
         for st in range(0,self.k):
+            mask["image"], mask["image_meta_dict"] = resampler(mask["image"],src_meta=mask["image_meta_dict"],
+                             dst_meta=stacks[st]["image_meta_dict"])
+            mask["image_meta_dict"]["spatial_shape"] = np.array(list(mask["image"].shape)[1:])
+            
+            mask = add_channel(mask)
+            
             stacks[st]["image"] = normalizer(stacks[st]["image"],mask["image"])
+            
+            mask["image"] = mask["image"].squeeze().unsqueeze(0)
         
         return fixed_images, stacks
         

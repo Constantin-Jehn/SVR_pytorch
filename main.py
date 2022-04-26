@@ -39,7 +39,7 @@ def preprocess():
     mode = "bicubic"
     
     svr_preprocessor = Preprocesser(src_folder, prep_folder, filenames, file_mask,pixdims, device, mode = mode)
-    fixed_images, stacks = svr_preprocessor.preprocess_stacks_and_common_vol()
+    fixed_images, stacks = svr_preprocessor.preprocess_stacks_and_common_vol(save_intermediates=True)
     svr_preprocessor.save_stacks(stacks,'out')
     
     fixed_images["image"] = t.squeeze(fixed_images["image"]).unsqueeze(0)
@@ -116,5 +116,5 @@ def optimize():
 
 if __name__ == '__main__':
     
-    optimize()
-    #preprocess()
+    #optimize()
+    preprocess()

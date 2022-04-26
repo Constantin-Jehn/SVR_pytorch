@@ -5,7 +5,7 @@ class RegistrationLoss(t.nn.Module):
     def __init__(self,loss_fnc:str,device):
         super(RegistrationLoss,self).__init__()
         if loss_fnc == "ncc":
-            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=3, kernel_size=1)
+            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=3, kernel_size=3)
         elif loss_fnc == "mi":
             self.monai_loss = monai.losses.GlobalMutualInformationLoss()
         else:

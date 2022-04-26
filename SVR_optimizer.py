@@ -59,9 +59,9 @@ class SVR_optimizer():
         
         svr_preprocessor = Preprocesser(src_folder, prep_folder, stack_filenames, mask_filename, pixdims, device, mode)
         
-        self.fixed_images, self.stacks = svr_preprocessor.preprocess_stacks_and_common_vol()
+        self.fixed_images, stacks = svr_preprocessor.preprocess_stacks_and_common_vol()
         
-        self.ground_truth = svr_preprocessor.get_cropped_stacks()
+        self.ground_truth = stacks
         
         print(f'preprocessing done in {time.time() - timer} s')
         
