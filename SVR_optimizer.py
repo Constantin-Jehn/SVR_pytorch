@@ -59,39 +59,10 @@ class SVR_optimizer():
         
         svr_preprocessor = Preprocesser(src_folder, prep_folder, stack_filenames, mask_filename, pixdims, device, mode)
         
-        self.fixed_images, stacks = svr_preprocessor.preprocess_stacks_and_common_vol()
+        self.fixed_images, self.stacks = svr_preprocessor.preprocess_stacks_and_common_vol()
         
-        self.ground_truth = stacks
-        
-        print(f'preprocessing done in {time.time() - timer} s')
-        
-        """
-        add_channel = AddChanneld(keys=["image"])
-        to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        
-        self.fixed_images = self.create_common_volume_registation()
-        self.fixed_images = add_channel(self.fixed_images)
-        
-        #self.fixed_images = self.create_multiresolution_fixed_images(pixdims)
-        # for i in range(0,len(self.fixed_images)):
-        #     self.fixed_images[i] = add_channel(self.fixed_images[i])
-        #     self.fixed_images[i]["image"].requires_grad = False
-        #     self.fixed_images[i] = to_device(self.fixed_images[i])
-       
-        
-        
-        # self.initial_vol = {"image": t.zeros_like(self.fixed_images[0]["image"]), "image_meta_dict": deepcopy(self.fixed_images[0]["image_meta_dict"])}
-        # self.initial_vol = to_device(self.initial_vol)
-        print("fixed_images_generated")
-        
-        
-        self.crop_images(upsampling = False)
-        #remains in initial coordiate system
-        self.ground_truth = self.load_stacks(to_device=True)
-        
-        #self.ground_truth, self.im_slices, self.target_dict, self.k = self.preprocess()
-
-        """    
+        self.ground_truth = self.stacks
+          
     
     def create_common_volume(self):
         """
@@ -223,7 +194,7 @@ class SVR_optimizer():
         #resampling_model = custom_models.ResamplingToFixed()
         #resampling_model.to(self.device)
         
-        loss = loss_module.RegistrationLossSingleSlice(loss_fnc, self.device)
+        loss = loss_module.RegistrationLoss(loss_fnc, self.device)
     
         loss_log = np.zeros((epochs,self.k,inner_epochs))
         
@@ -280,14 +251,14 @@ class SVR_optimizer():
                     model.train()
                     optimizer.zero_grad()
                     timer = time.time()
-                    transformed_slices = model(slices_tmp.detach(), local_stack["image_meta_dict"], fixed_image["image_meta_dict"], transform_to_fixed = False, mode = self.mode)
+                    transformed_slices = model(slices_tmp.detach(), local_stack["image_meta_dict"], fixed_image["image_meta_dict"], transform_to_fixed = True, mode = self.mode)
                     transformed_slices = transformed_slices.to(self.device)
                     print(f'forward pass. {time.time() - timer} s ')
                     
                     dot = make_dot(transformed_slices[0,:,:,:,:], params = dict(model.named_parameters()))
                     
                     timer = time.time()
-                    loss_tensor = loss(transformed_slices, fixed_image, slice_dims[st])
+                    loss_tensor = loss(transformed_slices, fixed_image)
                     
                     print(f'loss:  {time.time() - timer} s ')
                     

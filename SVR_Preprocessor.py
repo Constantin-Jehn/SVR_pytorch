@@ -59,8 +59,6 @@ class Preprocesser():
         self.crop_images(upsampling = False)
         #load cropped stacks
         stacks = self.load_stacks(to_device=True)
-        
-        
         return stacks
         
     def crop_images(self, upsampling = False, pixdim = 0):

@@ -45,11 +45,13 @@ class Reconstruction(t.nn.Module):
             
             for sli in range(0,self.n_slices):
                 transformed_slices[sli,:,:,:,:], _ = resampler(im_slices[sli,:,:,:,:],src_meta = ground_meta, 
-                                              dst_meta = fixed_image_meta, padding_mode = "zeros")
+                                                               dst_meta = fixed_image_meta, padding_mode = "zeros")
+            return transformed_slices  
+        
         else:
-            transformed_slices = im_slices
+            return im_slices
             
-        return transformed_slices  
+        
 
     def create_T(self,rotations, translations):
         """

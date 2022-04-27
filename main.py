@@ -116,5 +116,5 @@ def optimize():
 
 if __name__ == '__main__':
     
-    #optimize()
-    preprocess()
+    optimize()
+    #preprocess()
