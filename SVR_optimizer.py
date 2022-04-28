@@ -372,24 +372,19 @@ class SVR_optimizer():
                     affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
                 
                 affines_tmp = affines_slices[st]
-                transformed_stack = affine_transform_slices(local_slices, affines_tmp)
+                transformed_slices = affine_transform_slices(local_slices, affines_tmp)
                 
-                slice_dim = slice_dims[st]
                 for sl in range(0,n_slices[st]):
-                    if slice_dim == 0:
-                        tmp = transformed_stack[sl,:,sl,:,:]
-                    elif slice_dim == 1:
-                        tmp = transformed_stack[sl,:,:,sl,:]
-                    elif slice_dim == 2:
-                        tmp = transformed_stack[sl,:,:,:,sl]
-                    slice_resampled, _ = resampler_slices(tmp.unsqueeze(0), src_meta = local_stack["image_meta_dict"], dst_meta = fixed_image_meta)
+                    tmp = transformed_slices[sl,:,:,:,:]
+                    slice_resampled, _ = resampler_slices(tmp, src_meta = local_stack["image_meta_dict"], dst_meta = fixed_image_meta)
                     slice_resampled = slice_resampled.unsqueeze(0)
                     common_volume = common_volume + slice_resampled
+                common_volume = t.div(common_volume,n_slices[st])
             
-        self.fixed_images["image"] = common_volume.squeeze().unsqueeze(0)
+        world_stack = {"image": common_volume.squeeze().unsqueeze(0), "image_meta_dict": self.fixed_images["image_meta_dict"]}
         #fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
         loss_log = 0
-        return self.fixed_images, loss_log
+        return world_stack, loss_log
                 
             
     
