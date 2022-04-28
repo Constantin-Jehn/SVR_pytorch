@@ -300,11 +300,99 @@ class SVR_optimizer():
         #cast to image format
         fixed_image["image"] = common_volume
         fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
-        
         #loss_log = 0
-        
         return fixed_image, loss_log
-
+    
+    def optimize_volume_to_slice(self, epochs:int, inner_epochs:int, lr, loss_fnc = "ncc", opt_alg = "Adam"):
+        models = list()
+        slices = list()
+        n_slices = list()
+        slice_dims = list()
+        affines_slices = list()
+        
+        #Afffine transformations for updating common volume from slices
+        affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
+        resampler_slices = monai.transforms.ResampleToMatch(mode = self.mode)
+        
+        for st in range(0,self.k):
+            slice_tmp, n_slice, slice_dim = self.construct_slices_from_stack(self.stacks[st])
+            slices.append(slice_tmp)
+            n_slices.append(n_slice)
+            slice_dims.append(slice_dim)
+            models.append(custom_models.Volume_to_Slice(n_slices=n_slice, device=self.device))
+            affines_slices.append(t.eye(4).unsqueeze(0).repeat(n_slice,1,1))
+            
+                          
+        loss = loss_module.RegistrationLossSlice(loss_fnc, self.device)
+        resampler = monai.transforms.ResampleToMatch(mode = self.mode)
+        
+        common_volume = t.zeros_like(self.fixed_images["image"])
+        fixed_image_image = self.fixed_images["image"]
+        fixed_image_meta = self.fixed_images["image_meta_dict"]
+        
+        for epoch in range(0,epochs):
+            print(f'\n\n Epoch: {epoch}')
+            if epoch > 0:
+                fixed_image_image = common_volume
+                common_volume = t.zeros_like(self.fixed_images["image"])
+            
+            for st in range (0, self.k):
+                print(f"\n  stack: {st}")
+                model = models[st]
+                model.to(self.device)
+                
+                if opt_alg == "SGD":
+                    optimizer = t.optim.SGD(model.parameters(), lr = lr)
+                elif(opt_alg == "Adam"):
+                    optimizer = t.optim.Adam(model.parameters(), lr = lr)
+                else:
+                    assert("Choose SGD or Adam as optimizer")
+                
+                local_stack = self.stacks[st]
+                local_slices = slices[st]
+                
+                for inner_epoch in range(0,inner_epochs):
+                    model.train()
+                    optimizer.zero_grad()
+                    #return fixed_images resamples to local stack where inverse affines were applied
+                    #in shape (n_slices,1,[stack_shape]) affines 
+                    tr_fixed_images, affines_tmp = model(fixed_image_image.detach(), fixed_image_meta, local_stack["image_meta_dict"], mode = self.mode)
+                    
+                    tr_fixed_images = tr_fixed_images.to(self.device)
+                    
+                    #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
+                    loss_tensor = loss(tr_fixed_images, local_slices, n_slices[st], slice_dims[st])
+                    print(f'loss: {loss_tensor.item()}')
+                    loss_tensor.backward(retain_graph = False)
+                    
+                    optimizer.step()
+                
+                for sl in range(0,n_slices[st]):
+                    #order second argument is the first transform
+                    affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
+                
+                affines_tmp = affines_slices[st]
+                transformed_stack = affine_transform_slices(local_slices, affines_tmp)
+                
+                slice_dim = slice_dims[st]
+                for sl in range(0,n_slices[st]):
+                    if slice_dim == 0:
+                        tmp = transformed_stack[sl,:,sl,:,:]
+                    elif slice_dim == 1:
+                        tmp = transformed_stack[sl,:,:,sl,:]
+                    elif slice_dim == 2:
+                        tmp = transformed_stack[sl,:,:,:,sl]
+                    slice_resampled, _ = resampler_slices(tmp.unsqueeze(0), src_meta = local_stack["image_meta_dict"], dst_meta = fixed_image_meta)
+                    slice_resampled = slice_resampled.unsqueeze(0)
+                    common_volume = common_volume + slice_resampled
+            
+        self.fixed_images["image"] = common_volume.squeeze().unsqueeze(0)
+        #fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
+        loss_log = 0
+        return self.fixed_images, loss_log
+                
+            
+    
     def bending_loss_fucntion_single_stack(target_dict_image):
         monai_bending = monai.losses.BendingEnergyLoss()
         return monai_bending(target_dict_image.expand(-1,3,-1,-1,-1))
