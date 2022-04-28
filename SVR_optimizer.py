@@ -57,9 +57,9 @@ class SVR_optimizer():
         self.k = len(self.stack_filenames)
         self.mode = mode
         
-        svr_preprocessor = Preprocesser(src_folder, prep_folder, stack_filenames, mask_filename, pixdims, device, mode)
+        self.svr_preprocessor = Preprocesser(src_folder, prep_folder, stack_filenames, mask_filename, pixdims, device, mode)
         
-        self.fixed_images, self.stacks = svr_preprocessor.preprocess_stacks_and_common_vol()
+        self.fixed_images, self.stacks = self.svr_preprocessor.preprocess_stacks_and_common_vol()
         
         self.ground_truth = self.stacks
           
@@ -374,13 +374,19 @@ class SVR_optimizer():
                 affines_tmp = affines_slices[st]
                 transformed_slices = affine_transform_slices(local_slices, affines_tmp)
                 
+                common_stack = t.zeros_like(common_volume)
                 for sl in range(0,n_slices[st]):
                     tmp = transformed_slices[sl,:,:,:,:]
                     slice_resampled, _ = resampler_slices(tmp, src_meta = local_stack["image_meta_dict"], dst_meta = fixed_image_meta)
                     slice_resampled = slice_resampled.unsqueeze(0)
-                    common_volume = common_volume + slice_resampled
-                common_volume = t.div(common_volume,n_slices[st])
+                    slice_resampled = self.svr_preprocessor.denoise_single_slice(slice_resampled.squeeze().unsqueeze(0))
+                    common_stack = common_stack + slice_resampled.unsqueeze(0)
+                common_volume = common_volume + t.div(common_stack ,n_slices[st])
             
+            #common_volume = t.div(common_volume,self.k)
+            #common_volume = self.svr_preprocessor.normalize(common_volume.squeeze().unsqueeze(0))
+            #common_volume = common_volume.unsqueeze(0)
+                
         world_stack = {"image": common_volume.squeeze().unsqueeze(0), "image_meta_dict": self.fixed_images["image_meta_dict"]}
         #fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
         loss_log = 0

@@ -82,7 +82,7 @@ def optimize():
     
     epochs = 1
     inner_epochs = 2
-    lr = 0.0001
+    lr = 0.001
     loss_fnc = "mi"
     opt_alg = "Adam"
     

@@ -38,6 +38,7 @@ class Preprocesser():
         stacks = self.load_stacks(to_device=True)
         #denoise stacks
         stacks = self.denoising(stacks)
+        
         if save_intermediates:
             stacks = self.save_stacks(stacks,'den')
         #self.bias_correction_sitk(stacks)
@@ -164,6 +165,10 @@ class Preprocesser():
             stacks[st]["image"] = gauss_sharpen(stacks[st]["image"]) 
         return stacks
     
+    def denoise_single_slice(self, single_slice_image):
+        gauss_sharpen = monai.transforms.GaussianSharpen(sigma1=1, sigma2 = 1, alpha = 3)
+        return gauss_sharpen(single_slice_image) 
+    
     def bias_correction_sitk(self, stacks):
         corrector = sitk.N4BiasFieldCorrectionImageFilter()
         for st in range(0,self.k):
@@ -242,7 +247,7 @@ class Preprocesser():
         loader = LoadImaged(keys = ["image"])
         to_tensor = ToTensord(keys = ["image"])
         resampler = monai.transforms.ResampleToMatch(mode = "bilinear")
-        normalizer = monai.transforms.HistogramNormalize(max = 2048, num_bins = 2048)
+        normalizer = monai.transforms.HistogramNormalize(max = 2047, num_bins = 2048)
         
         path_mask = os.path.join(self.src_folder, self.mask_filename)
         mask_dict = {"image": path_mask}
@@ -273,6 +278,13 @@ class Preprocesser():
             mask["image"] = mask["image"].squeeze().unsqueeze(0)
         
         return fixed_images, stacks
+    
+    def normalize(self, fixed_image_image):
+        normalizer = monai.transforms.HistogramNormalize(max = 2047, num_bins = 2048)
+        #fixed_image_image = gauss_sharpen(fixed_image_image)
+        fixed_image_image = normalizer(fixed_image_image)
+        return fixed_image_image
+        
         
     def save_stacks(self, stacks, post_fix):
         
