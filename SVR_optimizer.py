@@ -57,10 +57,12 @@ class SVR_optimizer():
         self.stack_filenames = stack_filenames
         self.k = len(self.stack_filenames)
         self.mode = mode
+
+        self.pixdims = pixdims
         
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, mode)
         
-        self.fixed_images, self.stacks = self.svr_preprocessor.preprocess_stacks_and_common_vol()
+        self.fixed_images, self.stacks = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0])
         
         self.ground_truth = self.stacks
           
@@ -333,10 +335,6 @@ class SVR_optimizer():
         
         for epoch in range(0,epochs):
             print(f'\n\n Epoch: {epoch}')
-            if epoch > 0:
-                fixed_image_image = common_volume
-                self.svr_preprocessor.save_intermedediate_reconstruction(fixed_image_image, fixed_image_meta, epoch)
-                common_volume = t.zeros_like(self.fixed_images["image"])
             
             for st in range (0, self.k):
                 print(f"\n  stack: {st}")
@@ -392,11 +390,20 @@ class SVR_optimizer():
             # common_volume = common_volume.unsqueeze(0)
             #normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
             #common_volume = normalizer(common_volume)
-                
-        world_stack = {"image": common_volume.squeeze().unsqueeze(0), "image_meta_dict": self.fixed_images["image_meta_dict"]}
+
+            fixed_image_image = common_volume
+            if epoch < epochs - 1:
+                fixed_image = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(fixed_image_image, fixed_image_meta, epoch, self.pixdims[epoch+1])
+                fixed_image_image = fixed_image["image"]
+                fixed_image_meta = fixed_image["image_meta_dict"]
+                common_volume = t.zeros_like(fixed_image_image)
+            else:
+                self.svr_preprocessor.save_intermediate_reconstruction(fixed_image_image,fixed_image_meta,epoch)
+     
+        #world_stack = {"image": common_volume.squeeze().unsqueeze(0), "image_meta_dict": self.fixed_images["image_meta_dict"]}
         #fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
-        loss_log = 0
-        return world_stack, loss_log
+        #loss_log = 0
+        #return world_stack, loss_log
                 
     def bending_loss_fucntion_single_stack(target_dict_image):
         monai_bending = monai.losses.BendingEnergyLoss()

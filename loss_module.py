@@ -1,3 +1,4 @@
+from multiprocessing import reduction
 import monai 
 import torch as t
 
@@ -97,7 +98,7 @@ class RegistrationLossSlice(t.nn.Module):
         if loss_fnc == "ncc":
             self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=7)
         elif loss_fnc == "mi":
-            self.monai_loss = monai.losses.GlobalMutualInformationLoss()
+            self.monai_loss = monai.losses.GlobalMutualInformationLoss(reduction = "sum")
         else:
             assert("Please choose a valid loss function: either ncc or mi")
         self.device = device

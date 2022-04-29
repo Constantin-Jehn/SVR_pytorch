@@ -1,3 +1,4 @@
+from isort import file
 import torchio as tio
 import monai
 
@@ -33,7 +34,7 @@ class Preprocesser():
         self.mask_filename = mask_filename
         self.mode = mode
     
-    def preprocess_stacks_and_common_vol(self, save_intermediates = False):
+    def preprocess_stacks_and_common_vol(self, init_pix_dim, save_intermediates = False):
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         self.crop_images(upsampling = False)
         #load cropped stacks
@@ -45,7 +46,9 @@ class Preprocesser():
             stacks = self.save_stacks(stacks,'den')
         #self.bias_correction_sitk(stacks)
         fixed_images, stacks = self.create_common_volume_registration(stacks)
-        
+
+        fixed_images = self.resample_fixed_image(fixed_images,init_pix_dim)
+
         if save_intermediates:
             stacks = self.save_stacks(stacks,'reg')
             
@@ -144,6 +147,7 @@ class Preprocesser():
             stack_dict = add_channel(stack_dict)
             #keep meta data correct
             stack_dict["image_meta_dict"]["spatial_shape"] = np.array(list(stack_dict["image"].shape)[1:])
+            stack_dict["image_meta_dict"]["filename_or_obj"] = self.stack_filenames[i]
             #move to gpu
             if to_device:
                 stack_dict = to_device(stack_dict)
@@ -201,6 +205,7 @@ class Preprocesser():
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         stacks[0]["image"] = stacks[0]["image"].unsqueeze(0)
         fixed_meta = stacks[0]["image_meta_dict"]
+        fixed_meta["filename_or_obj"] = "reconstruction_volume.nii.gz"
         common_image = stacks[0]["image"].unsqueeze(0)
         
         for st in range(1,self.k):
@@ -263,8 +268,8 @@ class Preprocesser():
         mask["image_meta_dict"]["spatial_shape"] = np.array(list(mask["image"].shape)[1:])
         
         mask = add_channel(mask)
-        
-        fixed_images["image"] = normalizer(fixed_images["image"],mask["image"])
+
+        fixed_images["image"] = normalizer(fixed_images["image"])
         
         mask["image"] = mask["image"].squeeze().unsqueeze(0)
         
@@ -285,10 +290,8 @@ class Preprocesser():
         normalizer = monai.transforms.HistogramNormalize(max = 2047, num_bins = 2048)
         fixed_image_image = normalizer(fixed_image_image)
         return fixed_image_image
-        
-        
+         
     def save_stacks(self, stacks, post_fix):
-        
         folder = "preprocessing"
         path = os.path.join(folder)
         nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=post_fix,
@@ -300,11 +303,73 @@ class Preprocesser():
     
         return stacks
     
-    def save_intermedediate_reconstruction(self, fixed_image_image, fixed_image_meta, epoch):
+    def save_intermediate_reconstruction(self, fixed_image_image, fixed_image_meta, epoch):
+
         path = os.path.join(self.result_folder)
-        nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=str(epoch),
+        nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=f"{epoch:02}",
                                             resample = False, mode = self.mode, padding_mode = "zeros",
                                             separate_folder=False)
         nifti_saver.save(fixed_image_image.squeeze().unsqueeze(0), meta_data=fixed_image_meta)
 
-       
+    def save_intermediate_reconstruction_and_upsample(self, fixed_image_image, fixed_image_meta, epoch, pix_dim):
+        self.save_intermediate_reconstruction(fixed_image_image, fixed_image_meta, epoch)
+        #resample using torchio
+        filename = fixed_image_meta["filename_or_obj"]
+        filename = filename[:-7] + "_" + f"{epoch:02}" + ".nii.gz"
+        path = os.path.join(self.result_folder,filename)
+        fixed_image = tio.ScalarImage(path)
+        resampler = tio.transforms.Resample(pix_dim)
+        resamped_fixed = resampler(fixed_image)
+        resamped_fixed.save(path)
+        #load as nifti file and return
+        add_channel = AddChanneld(keys=["image"])
+        loader = LoadImaged(keys = ["image"])
+        to_tensor = ToTensord(keys = ["image"])
+        to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
+        fixed_dict = {"image": path}
+        fixed_dict = loader(fixed_dict)
+        fixed_dict = to_tensor(fixed_dict)
+        fixed_dict = add_channel(fixed_dict)
+        #keep meta data correct
+        fixed_dict["image_meta_dict"]["spatial_shape"] = np.array(list(fixed_dict["image"].shape)[1:])
+        fixed_dict["image_meta_dict"]["filename_or_obj"] = filename[:-10] + ".nii.gz"
+        #move to gpu
+        fixed_dict = to_device(fixed_dict)
+        return fixed_dict
+
+    def resample_fixed_image(self, fixed_image, pix_dim):
+        filename = fixed_image["image_meta_dict"]["filename_or_obj"]
+        path = os.path.join(self.result_folder)
+        nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=f"{-1:02}",
+                                            resample = False, mode = self.mode, padding_mode = "zeros",
+                                            separate_folder=False)
+        nifti_saver.save(fixed_image["image"].squeeze().unsqueeze(0), meta_data=fixed_image["image_meta_dict"])
+        
+        fixed_image["image_meta_dict"]["filename_or_obj"] = filename[:-10] + ".nii.gz"
+
+        filename = filename[:-7] + "_" + f"{-1:02}" + ".nii.gz"
+        path = os.path.join(self.result_folder,filename)
+        fixed_image = tio.ScalarImage(path)
+
+        resampler = tio.transforms.Resample(pix_dim)
+        resamped_fixed = resampler(fixed_image)
+
+        resamped_fixed.save(path)
+        #load as nifti file and return
+
+        add_channel = AddChanneld(keys=["image"])
+        loader = LoadImaged(keys = ["image"])
+        to_tensor = ToTensord(keys = ["image"])
+        to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
+        fixed_dict = {"image": path}
+        fixed_dict = loader(fixed_dict)
+        fixed_dict = to_tensor(fixed_dict)
+        fixed_dict = add_channel(fixed_dict)
+        fixed_dict = add_channel(fixed_dict)
+        #keep meta data correct
+        fixed_dict["image_meta_dict"]["spatial_shape"] = np.array(list(fixed_dict["image"].shape)[2:])
+        fixed_dict["image_meta_dict"]["filename_or_obj"] = filename[:-10] + ".nii.gz"
+        #move to gpu
+        fixed_dict = to_device(fixed_dict)
+
+        return fixed_dict
