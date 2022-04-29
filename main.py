@@ -75,7 +75,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    mode = "bicubic"
+    mode = "bilinear"
     
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, filenames, file_mask,pixdims, device, mode = mode)
@@ -92,14 +92,15 @@ def optimize():
     fixed_images["image"] = t.squeeze(fixed_images["image"]).unsqueeze(0)
     
     folder = "test_reconstruction_monai"
-    folder2 = "stacks"
+    folder2 = "volume_update"
     path = os.path.join(folder,folder2)
     
     
     nifti_saver = monai.data.NiftiSaver(output_dir=path, 
                                         resample = False, mode = mode, padding_mode = "zeros",
                                         separate_folder=False)
-    save_to = 'reconstruction_' + opt_alg + '_(' + str(pixdims[-1][0]).replace('.',',')  +'-'+ str(pixdims[-1][1]).replace('.',',') +'-'+ str(pixdims[-1][2]).replace('.',',') + ')_lr' + str(lr).replace('.',',') + '_' + str(epochs) + '_' + mode
+    #save_to = 'reconstruction_' + opt_alg + '_(' + str(pixdims[-1][0]).replace('.',',')  +'-'+ str(pixdims[-1][1]).replace('.',',') +'-'+ str(pixdims[-1][2]).replace('.',',') + ')_lr' + str(lr).replace('.',',') + '_' + str(epochs) + '_' + mode
+    save_to = "cv_man_norm"
     
     world_stack["image_meta_dict"]["filename_or_obj"] = save_to + "nii.gz"
     

@@ -1,5 +1,6 @@
 import torchio as tio
 import monai
+
 from monai.transforms import (
     AddChanneld,
     LoadImage,
@@ -281,7 +282,6 @@ class Preprocesser():
     
     def normalize(self, fixed_image_image):
         normalizer = monai.transforms.HistogramNormalize(max = 2047, num_bins = 2048)
-        #fixed_image_image = gauss_sharpen(fixed_image_image)
         fixed_image_image = normalizer(fixed_image_image)
         return fixed_image_image
         

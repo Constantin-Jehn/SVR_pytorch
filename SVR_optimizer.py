@@ -11,6 +11,7 @@ from monai.transforms import (
     ToTensord,
     RandAffine
 )
+import torchvision as tv
 import os
 import numpy as np
 import custom_models
@@ -311,7 +312,7 @@ class SVR_optimizer():
         affines_slices = list()
         
         #Afffine transformations for updating common volume from slices
-        affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
+        affine_transform_slices = monai.networks.layers.AffineTransform(mode = self.mode,  normalized = True, padding_mode = "zeros")
         resampler_slices = monai.transforms.ResampleToMatch(mode = self.mode)
         
         for st in range(0,self.k):
@@ -381,19 +382,21 @@ class SVR_optimizer():
                     slice_resampled = slice_resampled.unsqueeze(0)
                     slice_resampled = self.svr_preprocessor.denoise_single_slice(slice_resampled.squeeze().unsqueeze(0))
                     common_stack = common_stack + slice_resampled.unsqueeze(0)
-                common_volume = common_volume + t.div(common_stack ,n_slices[st])
+                #common_volume = common_volume + t.div(common_stack, t.max(common_stack)/2047)
+                common_volume = common_volume + common_stack
             
             #common_volume = t.div(common_volume,self.k)
-            #common_volume = self.svr_preprocessor.normalize(common_volume.squeeze().unsqueeze(0))
-            #common_volume = common_volume.unsqueeze(0)
+            common_volume = t.div(common_volume, t.max(common_volume)/2047)
+            # common_volume = self.svr_preprocessor.normalize(common_volume.squeeze().unsqueeze(0))
+            # common_volume = common_volume.unsqueeze(0)
+            #normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
+            #common_volume = normalizer(common_volume)
                 
         world_stack = {"image": common_volume.squeeze().unsqueeze(0), "image_meta_dict": self.fixed_images["image_meta_dict"]}
         #fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
         loss_log = 0
         return world_stack, loss_log
                 
-            
-    
     def bending_loss_fucntion_single_stack(target_dict_image):
         monai_bending = monai.losses.BendingEnergyLoss()
         return monai_bending(target_dict_image.expand(-1,3,-1,-1,-1))
