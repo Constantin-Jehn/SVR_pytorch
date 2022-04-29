@@ -25,7 +25,7 @@ from SVR_Preprocessor import Preprocesser
 
 
 class SVR_optimizer():
-    def __init__(self, src_folder, prep_folder, stack_filenames, mask_filename, pixdims, device, mode):
+    def __init__(self, src_folder, prep_folder, result_folder, stack_filenames, mask_filename, pixdims, device, mode):
         """
         constructer of SVR_optimizer class
         Parameters
@@ -58,7 +58,7 @@ class SVR_optimizer():
         self.k = len(self.stack_filenames)
         self.mode = mode
         
-        self.svr_preprocessor = Preprocesser(src_folder, prep_folder, stack_filenames, mask_filename, pixdims, device, mode)
+        self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, mode)
         
         self.fixed_images, self.stacks = self.svr_preprocessor.preprocess_stacks_and_common_vol()
         
@@ -335,6 +335,7 @@ class SVR_optimizer():
             print(f'\n\n Epoch: {epoch}')
             if epoch > 0:
                 fixed_image_image = common_volume
+                self.svr_preprocessor.save_intermedediate_reconstruction(fixed_image_image, fixed_image_meta, epoch)
                 common_volume = t.zeros_like(self.fixed_images["image"])
             
             for st in range (0, self.k):

@@ -57,16 +57,10 @@ def preprocess():
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
     
-    # filenames = ["10_3T_nody_001.nii.gz",
-    #                 "14_3T_nody_001.nii.gz"]
-
     filenames = ["10_3T_nody_001.nii.gz",
-                  
-                  "14_3T_nody_001.nii.gz",
-                 
-                  "21_3T_nody_001.nii.gz",
-                  
-                  "23_3T_nody_001.nii.gz"]
+                     "14_3T_nody_001.nii.gz"]
+
+
     
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
@@ -75,12 +69,13 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    mode = "bilinear"
+    result_folder = "results"
+    mode = "nearest"
     
     
-    svr_optimizer = SVR_optimizer(src_folder, prep_folder, filenames, file_mask,pixdims, device, mode = mode)
+    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, mode = mode)
     
-    epochs = 1
+    epochs = 2
     inner_epochs = 2
     lr = 0.001
     loss_fnc = "mi"
@@ -100,7 +95,7 @@ def optimize():
                                         resample = False, mode = mode, padding_mode = "zeros",
                                         separate_folder=False)
     #save_to = 'reconstruction_' + opt_alg + '_(' + str(pixdims[-1][0]).replace('.',',')  +'-'+ str(pixdims[-1][1]).replace('.',',') +'-'+ str(pixdims[-1][2]).replace('.',',') + ')_lr' + str(lr).replace('.',',') + '_' + str(epochs) + '_' + mode
-    save_to = "cv_man_norm"
+    save_to = "cv_man_norm_nearest"
     
     world_stack["image_meta_dict"]["filename_or_obj"] = save_to + "nii.gz"
     

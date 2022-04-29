@@ -23,10 +23,11 @@ import SimpleITK as sitk
 
 
 class Preprocesser():
-    def __init__(self, src_folder, prep_folder, stack_filenames, mask_filename, pixdims, device, mode):
+    def __init__(self, src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, mode):
         self.device = device
         self.src_folder = src_folder
         self.prep_folder = prep_folder
+        self.result_folder = result_folder
         self.stack_filenames = stack_filenames
         self.k = len(self.stack_filenames)
         self.mask_filename = mask_filename
@@ -299,4 +300,11 @@ class Preprocesser():
     
         return stacks
     
+    def save_intermedediate_reconstruction(self, fixed_image_image, fixed_image_meta, epoch):
+        path = os.path.join(self.result_folder)
+        nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=str(epoch),
+                                            resample = False, mode = self.mode, padding_mode = "zeros",
+                                            separate_folder=False)
+        nifti_saver.save(fixed_image_image.squeeze().unsqueeze(0), meta_data=fixed_image_meta)
+
        
