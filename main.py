@@ -17,6 +17,7 @@ import torch as t
 from copy import deepcopy
 from SVR_optimizer import SVR_optimizer
 from SVR_Preprocessor import Preprocesser
+import errno
 
 def preprocess():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
@@ -59,14 +60,17 @@ def optimize():
     
     filenames = ["10_3T_nody_001.nii.gz",
                 
+                "14_3T_nody_001.nii.gz"]
+
+    """"
+    filenames = ["10_3T_nody_001.nii.gz",
+                
                 "14_3T_nody_001.nii.gz",
                 
                 "21_3T_nody_001.nii.gz",
                 
                 "23_3T_nody_001.nii.gz"]
-
-
-    
+    """
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
     pixdims = [(2.0, 2.0, 2.0),(1.5,1.5,1.5),(1.0,1.0,1.0),(1.0,1.0,1.0)]
@@ -74,23 +78,27 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = "results_multi_res"
+    result_folder = os.path.join("results","two_stacks_multi_res")
+    
+    try:
+        os.mkdir(result_folder)
+    except OSError as exc:
+        if exc.errno != errno.EEXIST:
+            raise
+        pass
     mode = "nearest"
     
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, mode = mode)
     
-    epochs = 3
-    inner_epochs = 3
+    epochs = 2
+    inner_epochs = 1
     lr = 0.001
     loss_fnc = "mi"
     opt_alg = "Adam"
     
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, loss_fnc=loss_fnc, opt_alg=opt_alg)
     
-
-    
-
 if __name__ == '__main__':
     
     optimize()
