@@ -336,8 +336,6 @@ class SVR_optimizer():
         for epoch in range(0,epochs):
             print(f'\n\n Epoch: {epoch}')
 
-            
-            
             for st in range (0, self.k):
                 print(f"\n  stack: {st}")
                 model = models[st]
@@ -374,7 +372,14 @@ class SVR_optimizer():
                     #order second argument is the first transform
                     affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
                 
+
+                """
+                ToDo:
+                Apply outlier removal --> get likelihood_image and multiply to affine_slices Before transformation
+                """
+
                 affines_tmp = affines_slices[st]
+                #apply affines to transform slices
                 transformed_slices = affine_transform_slices(local_slices, affines_tmp)
                 transformed_slices = transformed_slices.detach()
                 

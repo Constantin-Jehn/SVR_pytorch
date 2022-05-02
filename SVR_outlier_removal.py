@@ -54,6 +54,7 @@ class outlier_removal(t.nn.Module):
 
             log_likelihood_image_old = log_likelihood_image
             avg_log_likelihoods.append(t.mean(log_likelihood_image))
+            print(f'log average delta: {avg_log_delta}')
 
         return p
         
