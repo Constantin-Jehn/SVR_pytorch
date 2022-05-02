@@ -16,7 +16,6 @@ from monai.transforms.utils import (
     create_translate
     )
 from copy import deepcopy
-import pytorch3d as p3d
 
 import numpy as np
 
@@ -87,7 +86,17 @@ class Volume_to_Slice(t.nn.Module):
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
     
     def forward(self, fixed_image_image, fixed_image_meta, local_stack_meta, mode = "bilinear"):
-        
+        """
+        fixed_image_image: image_tensor of registration target/volume
+        fixed_image_meta: dictionary with meta data of fixed_image
+        local_stack_meta: dictionary with meta data of local stack
+        mode: interpolation mode for resampling
+
+        returns:
+        fixed_image_tran: tensor containing the fixed images transformed by the inverse affines of each slice, hence the corresponding layer 
+        is a simulated slice
+        affines: affine transformation matrices for each slice
+        """
         resampler = monai.transforms.ResampleToMatch(mode = mode)
         add_channel = AddChanneld(keys=["image"])
         
@@ -114,7 +123,9 @@ class Volume_to_Slice(t.nn.Module):
     
             affines = t.cat((affines,aff.unsqueeze(0)),0)
             inv_affines = t.cat((inv_affines,inv_aff.unsqueeze(0)),0)
-            
+
+        #slice simulation by transforming fixed image by inv affine --> layer are only 2 dimensional and align with the slices
+        # note that fixed image was resamples to local stack so dimensionality matches and we can forward the transformed fixed images directly to the loss
         fixed_image_tran = self.affine_layer(fixed_image_image_batch, inv_affines)
 
         return fixed_image_tran, affines

@@ -57,12 +57,12 @@ def preprocess():
 
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-    
+    """
     filenames = ["10_3T_nody_001.nii.gz",
                 
                 "14_3T_nody_001.nii.gz"]
 
-    """"
+    """
     filenames = ["10_3T_nody_001.nii.gz",
                 
                 "14_3T_nody_001.nii.gz",
@@ -70,15 +70,15 @@ def optimize():
                 "21_3T_nody_001.nii.gz",
                 
                 "23_3T_nody_001.nii.gz"]
-    """
+    
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
-    pixdims = [(2.0, 2.0, 2.0),(1.5,1.5,1.5),(1.0,1.0,1.0),(1.0,1.0,1.0)]
+    pixdims = [(2.0, 2.0, 2.0),(1.5,1.5,1.5),(1.0,1.0,1.0),(1.4,1.4,1.4),(1.2,1.2,1.2),(1.0,1.0,1.0)]
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","two_stacks_multi_res")
+    result_folder = os.path.join("results","affines")
     
     try:
         os.mkdir(result_folder)
@@ -91,8 +91,8 @@ def optimize():
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, mode = mode)
     
-    epochs = 2
-    inner_epochs = 1
+    epochs = 3
+    inner_epochs = 4
     lr = 0.001
     loss_fnc = "mi"
     opt_alg = "Adam"
@@ -100,6 +100,5 @@ def optimize():
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, loss_fnc=loss_fnc, opt_alg=opt_alg)
     
 if __name__ == '__main__':
-    
     optimize()
     #preprocess()

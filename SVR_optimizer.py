@@ -20,7 +20,6 @@ from copy import deepcopy
 import loss_module
 import time
 import matplotlib.pyplot as plt
-from torchviz import make_dot
 from SVR_Preprocessor import Preprocesser
 
 
@@ -258,7 +257,7 @@ class SVR_optimizer():
                     transformed_slices = transformed_slices.to(self.device)
                     print(f'forward pass. {time.time() - timer} s ')
                     
-                    dot = make_dot(transformed_slices[0,:,:,:,:], params = dict(model.named_parameters()))
+                    #dot = make_dot(transformed_slices[0,:,:,:,:], params = dict(model.named_parameters()))
                     
                     timer = time.time()
                     loss_tensor = loss(transformed_slices, fixed_image)
@@ -323,7 +322,8 @@ class SVR_optimizer():
             n_slices.append(n_slice)
             slice_dims.append(slice_dim)
             models.append(custom_models.Volume_to_Slice(n_slices=n_slice, device=self.device))
-            affines_slices.append(t.eye(4).unsqueeze(0).repeat(n_slice,1,1))
+            #store affine transforms
+            affines_slices.append(t.eye(4, device=self.device).unsqueeze(0).repeat(n_slice,1,1))
             
                           
         loss = loss_module.RegistrationLossSlice(loss_fnc, self.device)
@@ -335,6 +335,8 @@ class SVR_optimizer():
         
         for epoch in range(0,epochs):
             print(f'\n\n Epoch: {epoch}')
+
+            
             
             for st in range (0, self.k):
                 print(f"\n  stack: {st}")
@@ -368,11 +370,13 @@ class SVR_optimizer():
                     optimizer.step()
                 
                 for sl in range(0,n_slices[st]):
+                    #multithe new transform to the existing transform
                     #order second argument is the first transform
                     affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
                 
                 affines_tmp = affines_slices[st]
                 transformed_slices = affine_transform_slices(local_slices, affines_tmp)
+                transformed_slices = transformed_slices.detach()
                 
                 common_stack = t.zeros_like(common_volume)
                 for sl in range(0,n_slices[st]):
@@ -404,7 +408,7 @@ class SVR_optimizer():
         #fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
         #loss_log = 0
         #return world_stack, loss_log
-                
+    
     def bending_loss_fucntion_single_stack(target_dict_image):
         monai_bending = monai.losses.BendingEnergyLoss()
         return monai_bending(target_dict_image.expand(-1,3,-1,-1,-1))

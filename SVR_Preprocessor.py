@@ -1,4 +1,3 @@
-from isort import file
 import torchio as tio
 import monai
 
