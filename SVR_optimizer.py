@@ -313,8 +313,8 @@ class SVR_optimizer():
         slice_dims = list()
         affines_slices = list()
         
-        #Afffine transformations for updating common volume from slices
-        affine_transform_slices = monai.networks.layers.AffineTransform(mode = self.mode,  normalized = True, padding_mode = "zeros")
+        #Afffine transformations for updating common volume from slices (use bilinear because it's 2d transform)
+        affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
         resampler_slices = monai.transforms.ResampleToMatch(mode = self.mode)
         
         for st in range(0,self.k):
