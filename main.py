@@ -73,12 +73,12 @@ def optimize():
     
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
-    pixdims = [(2.0, 2.0, 2.0),(1.5,1.5,1.5),(1.0,1.0,1.0),(1.4,1.4,1.4),(1.2,1.2,1.2),(1.0,1.0,1.0)]
+    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.4,1.4,1.4),(1.2,1.2,1.2),(1.0,1.0,1.0)]
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","affines")
+    result_folder = os.path.join("results","two_stacks_first_outlier_removal")
     
     try:
         os.mkdir(result_folder)
@@ -86,13 +86,13 @@ def optimize():
         if exc.errno != errno.EEXIST:
             raise
         pass
-    mode = "nearest"
+    mode = "bicubic"
     
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, mode = mode)
     
     epochs = 3
-    inner_epochs = 4
+    inner_epochs = 2
     lr = 0.001
     loss_fnc = "mi"
     opt_alg = "Adam"

@@ -21,6 +21,7 @@ import loss_module
 import time
 import matplotlib.pyplot as plt
 from SVR_Preprocessor import Preprocesser
+from SVR_outlier_removal import outlier_removal
 
 
 class SVR_optimizer():
@@ -367,12 +368,38 @@ class SVR_optimizer():
                     
                     optimizer.step()
                 
+                likelihood_images = t.ones_like(local_slices, device=self.device)
                 for sl in range(0,n_slices[st]):
                     #multithe new transform to the existing transform
                     #order second argument is the first transform
                     affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
-                
 
+                    slice_dim = slice_dims[st]
+                    if slice_dim == 0:
+                        pred = tr_fixed_images[sl,0,sl,:,:]
+                        target = local_slices[sl,0,sl,:,:]
+                    elif slice_dim == 1:
+                        pred = tr_fixed_images[sl,0,:,sl,:]
+                        target = local_slices[sl,0,:,sl,:]
+                    elif slice_dim == 2:
+                        pred = tr_fixed_images[sl,0,:,:,sl]
+                        target = local_slices[sl,0,:,:,sl]
+
+                    error_tensor = pred - target
+
+                    outlier_remover = outlier_removal(error_tensor)
+                    p = outlier_remover(error_tensor)
+
+                    if slice_dim == 0:
+                        likelihood_images[sl,0,sl,:,:] = p
+                    elif slice_dim == 1:
+                        likelihood_images[sl,0,:,sl,:] = p
+                    elif slice_dim == 2:
+                        likelihood_images[sl,0,:,:,sl] = p
+
+
+                #multiply likelihood to each voxel
+                local_slices = t.mul(local_slices,likelihood_images)
                 """
                 ToDo:
                 Apply outlier removal --> get likelihood_image and multiply to affine_slices Before transformation
