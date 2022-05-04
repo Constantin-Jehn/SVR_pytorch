@@ -413,3 +413,14 @@ class Preprocesser():
         fixed_dict = to_device(fixed_dict)
 
         return fixed_dict
+
+    def monai_to_torchio(self, monai_dict):
+        return tio.Image(tensor=monai_dict["image"], affine=monai_dict["image_meta_dict"]["affine"])
+    
+    def update_monai_from_tio(self, tio_image, monai_dict):
+        monai_dict["image"] = tio_image.tensor
+        monai_dict["image_meta_dict"]["affine"] = tio_image.affine
+        monai_dict["image_meta_dict"]["spatial_shape"] = np.array(list(tio_image.tensor.shape)[1:])
+        return monai_dict
+
+    
