@@ -14,6 +14,7 @@ from monai.transforms import (
 )
 import os
 import numpy as np
+from zmq import device
 import custom_models
 import torch as t
 from copy import deepcopy
@@ -348,31 +349,20 @@ class Preprocesser():
     def save_intermediate_reconstruction_and_upsample(self, fixed_image_image, fixed_image_meta, epoch, pix_dim):
         self.save_intermediate_reconstruction(
             fixed_image_image, fixed_image_meta, epoch)
-        # resample using torchio
         filename = fixed_image_meta["filename_or_obj"]
         filename = filename[:-7] + "_" + f"{epoch:02}" + ".nii.gz"
         path = os.path.join(self.result_folder, filename)
-        fixed_image = tio.ScalarImage(path)
-        resampler = tio.transforms.Resample(pix_dim)
-        resamped_fixed = resampler(fixed_image)
-        resamped_fixed.save(path)
-        # load as nifti file and return
+        to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         add_channel = AddChanneld(keys=["image"])
-        loader = LoadImaged(keys=["image"])
-        to_tensor = ToTensord(keys=["image"])
-        to_device = monai.transforms.ToDeviced(
-            keys=["image"], device=self.device)
-        fixed_dict = {"image": path}
-        fixed_dict = loader(fixed_dict)
-        fixed_dict = to_tensor(fixed_dict)
-        fixed_dict = add_channel(fixed_dict)
-        # keep meta data correct
-        fixed_dict["image_meta_dict"]["spatial_shape"] = np.array(
-            list(fixed_dict["image"].shape)[1:])
-        fixed_dict["image_meta_dict"]["filename_or_obj"] = filename[:-10] + ".nii.gz"
-        # move to gpu
-        fixed_dict = to_device(fixed_dict)
-        return fixed_dict
+        # resample using torchio
+        tio_image = tio.Image(tensor=fixed_image_image.squeeze().unsqueeze(0).cpu(), affine=fixed_image_meta["affine"])
+        resampler = tio.transforms.Resample(pix_dim, image_interpolation="gaussian")
+        tio_resampled = resampler(tio_image)
+        monai_resampled = self.update_monai_from_tio(tio_resampled,{"image":fixed_image_image, "image_meta_dict": fixed_image_meta})
+        monai_resampled["image_meta_dict"]["filename_or_obj"] = filename[:-10] + ".nii.gz"
+        monai_resampled = to_device(monai_resampled)
+        monai_resampled = add_channel(monai_resampled)
+        return monai_resampled
 
     def resample_fixed_image(self, fixed_image, pix_dim):
         filename = fixed_image["image_meta_dict"]["filename_or_obj"]
