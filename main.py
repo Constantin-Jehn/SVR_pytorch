@@ -58,7 +58,7 @@ def preprocess():
 
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-    """
+   
     filenames = ["10_3T_nody_001.nii.gz",
                 
                 "14_3T_nody_001.nii.gz"]
@@ -71,6 +71,7 @@ def optimize():
                 "21_3T_nody_001.nii.gz",
                 
                 "23_3T_nody_001.nii.gz"]
+    """
     
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
@@ -79,7 +80,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","four_stacks_gaussian_updates_lr0-0002")
+    result_folder = os.path.join("results","test")
     
     try:
         os.mkdir(result_folder)
@@ -93,7 +94,7 @@ def optimize():
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
-    epochs = 3
+    epochs = 2
     inner_epochs = 3
     lr = 0.0002
     loss_fnc = "mi"

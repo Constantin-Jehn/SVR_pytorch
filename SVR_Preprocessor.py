@@ -3,14 +3,8 @@ import monai
 
 from monai.transforms import (
     AddChanneld,
-    LoadImage,
     LoadImaged,
-    Orientationd,
-    Rand3DElasticd,
-    RandAffined,
-    Spacingd,
     ToTensord,
-    RandAffine
 )
 import os
 import numpy as np
@@ -24,7 +18,20 @@ import SimpleITK as sitk
 import torchvision as tv
 
 class Preprocesser():
-    def __init__(self, src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode):
+    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, device:str, monai_mode:str, tio_mode:str)->None:
+        """
+        Constructor of Preprocessor: class to take care of preprocessing such as initial 3d-3d registration, denoising or normalization
+
+        Args:
+            src_folder (str): initial nifti_files
+            prep_folder (str): folder to save prepocessed files
+            result_folder (str): folder to save reconstruction results
+            stack_filenames (list): of filenames of stacks to be reconstructed
+            mask_filename (str): nifti filename to crop input images
+            device (str): device to calculate on mainly
+            monai_mode (str): interpolation mode for monai resampling
+            tio_mode (str): interpolation mode for monai resampling
+        """
         self.device = device
         self.src_folder = src_folder
         self.prep_folder = prep_folder
@@ -35,21 +42,19 @@ class Preprocesser():
         self.mode = monai_mode
         self.tio_mode = tio_mode
 
-    def preprocess_stacks_and_common_vol(self, init_pix_dim, save_intermediates=False):
+    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, save_intermediates:bool=False)->tuple:
+        """        
+        preprocessing procedure before the optimization contains:
+        denoising, normalization, initial 3d-3d registration
+
+        Args:
+            init_pix_dim (tuple): initial resolution of the fixed image
+            save_intermediates (bool, optional):whether to save intermediate steps of preprocessing Defaults to False.
+
+        Returns:
+            tuple: _description_
         """
-        Parameters
-        ----------
-        init_pix_dim : tuple
-            initial resolution of the fixed image
-        save_intermediates : boolean
-            whether to save intermediat steps of preprocessing
-        Returns
-        -------
-        fixed_images: dict
-            inital common volume
-        stacks: list
-            preprocessed stacks
-        """
+
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         self.crop_images(upsampling=False)
         # load cropped stacks
@@ -60,15 +65,13 @@ class Preprocesser():
         if save_intermediates:
             stacks = self.save_stacks(stacks, 'den')
 
-        
         stacks = self.normalize(stacks)
         if save_intermediates:
             stacks = self.save_stacks(stacks, 'norm')
-        # self.fixed_images = add_channel(self.fixed_images)
-        # self.bias_correction_sitk(stacks)
-        fixed_images, stacks = self.create_common_volume_registration(stacks)
 
-        fixed_images = self.resample_fixed_image(fixed_images, init_pix_dim)
+        fixed_image, stacks = self.create_common_volume_registration(stacks)
+
+        fixed_image = self.resample_fixed_image(fixed_image, init_pix_dim)
 
         if save_intermediates:
             stacks = self.save_stacks(stacks, 'reg')
@@ -76,40 +79,37 @@ class Preprocesser():
         for st in range(0, len(stacks)):
             stacks[st]["image"] = stacks[st]["image"].squeeze().unsqueeze(0)
 
-        return fixed_images, stacks
+        return fixed_image, stacks
 
-    def get_cropped_stacks(self):
+    def get_cropped_stacks(self)->list:
+        """
+        crops images and returns them
+
+        Returns:
+            list: list of cropped stacks
+        """
         self.crop_images(upsampling=False)
         # load cropped stacks
         stacks = self.load_stacks(to_device=True)
         return stacks
 
-    def crop_images(self, upsampling=False, pixdim=0):
+    def crop_images(self, upsampling:bool=False, pixdim=0)->None:
         """
-        Parameters
-        ----------
-        src_folder : string
-            folder of images to be cropped
-        filenames : string
-            stacks that should be cropped
-        mask_filename : string
-            mask for cropping
-        dst_folder : string
-            folder to save cropped files
-        upsampling-flag:
-            map all stacks in high resolution to common coord for creation of 
-            initial hr fixed_image
+        crops images from source directory according to provided mask and saves them to prep folder
 
-        Returns
-        -------
-        None.
+        Args:
+            upsampling (bool, optional): whether or not to upsample fixed image Defaults to False.
+            pixdim (int, optional): pix dim to upsample to. Defaults to 0.
         """
+
+
         path_mask = os.path.join(self.src_folder, self.mask_filename)
         mask = tio.LabelMap(path_mask)
         path_dst = os.path.join(self.prep_folder, self.mask_filename)
         mask.save(path_dst)
 
         for i in range(0, self.k):
+            #resample mask to each stack
             filename = self.stack_filenames[i]
             path_stack = os.path.join(self.src_folder, filename)
             stack = tio.ScalarImage(path_stack)
@@ -117,6 +117,7 @@ class Preprocesser():
             resampled_mask = resampler(deepcopy(mask))
             subject = tio.Subject(stack=stack, mask=resampled_mask)
 
+            #find indices to crop image as tensor
             masked_indices_1 = t.nonzero(subject.mask.data)
             min_indices = np.array([t.min(masked_indices_1[:, 1]).item(), t.min(
                 masked_indices_1[:, 2]).item(), t.min(masked_indices_1[:, 3]).item()])
@@ -142,16 +143,18 @@ class Preprocesser():
             path_dst = os.path.join(self.prep_folder, filename)
             cropped_stack.stack.save(path_dst)
 
-    def load_stacks(self, to_device=False):
+    def load_stacks(self, to_device=False)->list:
         """
         After cropping the initial images in low resolution are saved in their original coordinates
         for the loss computation
-        Returns
-        -------
-        ground_truth : list
-            list of dictionaries containing the ground truths
 
+        Args:
+            to_device (bool, optional): whether o put tensor to device Defaults to False.
+
+        Returns:
+            list: _list of dictionaries containing the ground truths
         """
+
         add_channel = AddChanneld(keys=["image"])
         loader = LoadImaged(keys=["image"])
         to_tensor = ToTensord(keys=["image"])
@@ -176,30 +179,42 @@ class Preprocesser():
             stack_list.append(stack_dict)
         return stack_list
 
-    def denoising(self, stacks):
-        """
-        Applies Gaussian Sharpen Filter to all stacks
+    def denoising(self, stacks:list)->list:
+        """Applies Gaussian Sharpen Filter to all stacks
 
-        Parameters
-        ----------
-        stacks : list
+        Args:
+            stacks (list): unprocessed stacks
 
-        Returns
-        -------
-        stacks : list
+        Returns:
+            list: denoised stacks
         """
+
         gauss_sharpen = monai.transforms.GaussianSharpen(
             sigma1=1, sigma2=1, alpha=3)
         for st in range(0, self.k):
             stacks[st]["image"] = gauss_sharpen(stacks[st]["image"])
         return stacks
 
-    def denoise_single_slice(self, single_slice_image):
+    def denoise_single_tensor(self, single_slice_image:t.tensor)->t.tensor:
+        """
+        denoises single tensor
+
+        Args:
+            single_slice_image (t.tensor): 
+
+        Returns:
+            t.tensor:
+        """
         gauss_sharpen = monai.transforms.GaussianSharpen(
             sigma1=1, sigma2=1, alpha=3)
         return gauss_sharpen(single_slice_image)
 
-    def bias_correction_sitk(self, stacks):
+    def bias_correction_sitk(self, stacks:list)->None:
+        """Applies N4 Bias Correction and saves corrected files
+
+        Args:
+            stacks (list): stacks to be bias corrected
+        """
         corrector = sitk.N4BiasFieldCorrectionImageFilter()
         for st in range(0, self.k):
             path = os.path.join(
@@ -274,53 +289,68 @@ class Preprocesser():
 
         return {"image": common_tensor.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta}, stacks
 
-    def histogram_normalize(self, fixed_images, stacks):
-        """
+    def histogram_normalize(self, fixed_image:dict, stacks:list)->tuple:
+        """        
         Applies histogram normalization to common volume and alls stacks
         Parameters
-        ----------
-        fixed_images : dict
-            common_volume
-        stacks : list
-            DESCRIPTION.
 
-        Returns
-        -------
-        fixed_images : dict
+        Args:
+            fixed_image (dict): common/fixed image
+            stacks (list): stacks
 
-        stacks : list
+        Returns:
+            tuple: normalized fixed_image, stacks
         """
-        add_channel = AddChanneld(keys=["image"])
-        loader = LoadImaged(keys=["image"])
-        to_tensor = ToTensord(keys=["image"])
-        resampler = monai.transforms.ResampleToMatch(mode=self.mode)
         normalizer = monai.transforms.HistogramNormalize(
             max=2047, num_bins=2048)
-
-
-
-        fixed_images["image"] = normalizer(fixed_images["image"])
+        fixed_image["image"] = normalizer(fixed_image["image"])
         for st in range(0, self.k):
             stacks[st]["image"] = normalizer(stacks[st]["image"])
-        return fixed_images, stacks
+        return fixed_image, stacks
 
-    def histogram_normalize(self, fixed_image_image):
-        """
-        normalizes fixed_image_image using Histogram
+    def histogram_normalize(self, fixed_image_tensor:t.tensor)->t.tensor:
+        """ 
+         normalizes fixed_image_image using Histogram
+
+        Args:
+            fixed_image_tensor (t.tensor): tensor to be normalized
+
+        Returns:
+            t.tensor: normalized tensor
         """
         normalizer = monai.transforms.HistogramNormalize(
             max=2047, num_bins=2048)
-        fixed_image_image = normalizer(fixed_image_image)
-        return fixed_image_image
+        fixed_image_tensor = normalizer(fixed_image_tensor)
+        return fixed_image_tensor
 
-    def normalize(self,stacks):
+    def normalize(self,stacks:list)->list:
+        """
+        Normalized to zero mean and std = 1
+
+        Args:
+            stacks (list): initial stacks
+
+        Returns:
+            list: normalized stacks
+        """
         for st in range(0,len(stacks)):
             st_tensor = stacks[st]["image"]
             normalizer = tv.transforms.Normalize(t.mean(st_tensor), t.std(st_tensor))
             stacks[st]["image"] = normalizer(st_tensor)
         return stacks
 
-    def save_stacks(self, stacks, post_fix):
+    def save_stacks(self, stacks:list, post_fix:str)->list:
+        """
+        saves stack with defined post_fix and retun stacks again, 
+        used if save_intermediate during preprocessing is activated
+
+        Args:
+            stacks (list): stacks to be save
+            post_fix (str): desired postfix on filename
+
+        Returns:
+            list: stacks
+        """
         folder = "preprocessing"
         path = os.path.join(folder)
         nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=post_fix,
@@ -333,34 +363,60 @@ class Preprocesser():
 
         return stacks
 
-    def save_intermediate_reconstruction(self, fixed_image_image, fixed_image_meta, epoch):
+    def save_intermediate_reconstruction(self, fixed_image_tensor:t.tensor, fixed_image_meta:dict, epoch:int)->None:
+        """
+        saves intermediate reconstruction during optimization
+
+        Args:
+            fixed_image_tensor (t.tensor): tensor of reconstruction to save
+            fixed_image_meta (dict): meta_dict of image to save
+            epoch (int): epoch to be added to filename
+        """
 
         path = os.path.join(self.result_folder)
         nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=f"{epoch:02}",
                                             resample=False, mode=self.mode, padding_mode="zeros",
                                             separate_folder=False)
-        nifti_saver.save(fixed_image_image.squeeze(
+        nifti_saver.save(fixed_image_tensor.squeeze(
         ).unsqueeze(0), meta_data=fixed_image_meta)
 
-    def save_intermediate_reconstruction_and_upsample(self, fixed_image_image, fixed_image_meta, epoch, pix_dim):
-        self.save_intermediate_reconstruction(
-            fixed_image_image, fixed_image_meta, epoch)
+    def save_intermediate_reconstruction_and_upsample(self, fixed_image_tensor:t.tensor, fixed_image_meta:dict, epoch:int, pix_dim:tuple)->dict:
+        """_summary_
+
+        Args:
+            fixed_image_tensor (t.tensor): tensor of fixed image
+            fixed_image_meta (dict): meta dict of fixed image
+            epoch (int): current epoch, is added to filename
+            pix_dim (tuple): pix_dim to sample next
+
+        Returns:
+            dict: upsampled monai dict
+        """
+        self.save_intermediate_reconstruction(fixed_image_tensor, fixed_image_meta, epoch)
         filename = fixed_image_meta["filename_or_obj"]
         filename = filename[:-7] + "_" + f"{epoch:02}" + ".nii.gz"
-        path = os.path.join(self.result_folder, filename)
-        to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        add_channel = AddChanneld(keys=["image"])
         # resample using torchio
-        tio_image = tio.Image(tensor=fixed_image_image.squeeze().unsqueeze(0).cpu(), affine=fixed_image_meta["affine"])
+        tio_image = tio.Image(tensor=fixed_image_tensor.squeeze().unsqueeze(0).cpu(), affine=fixed_image_meta["affine"])
         resampler = tio.transforms.Resample(pix_dim, image_interpolation=self.tio_mode)
         tio_resampled = resampler(tio_image)
 
+        #keep filename proper
         filename = filename[:-10] + ".nii.gz"
-        monai_resampled = self.update_monai_from_tio(tio_resampled,{"image":fixed_image_image, "image_meta_dict": fixed_image_meta}, filename)
+        monai_resampled = self.update_monai_from_tio(tio_resampled,{"image":fixed_image_tensor, "image_meta_dict": fixed_image_meta}, filename)
 
         return monai_resampled
 
-    def resample_fixed_image(self, fixed_image, pix_dim):
+    def resample_fixed_image(self, fixed_image:dict, pix_dim:tuple)->dict:
+        """
+        Can be used to resample fixed image without saving it
+
+        Args:
+            fixed_image (dict): monai dict
+            pix_dim (tuple): desired pixdim/resolution
+
+        Returns:
+            dict: upsampled monai dict
+        """
         filename = fixed_image["image_meta_dict"]["filename_or_obj"]
         path = os.path.join(self.result_folder)
         nifti_saver = monai.data.NiftiSaver(output_dir=path, output_postfix=f"{-1:02}",
@@ -375,9 +431,7 @@ class Preprocesser():
         path = os.path.join(self.result_folder, filename)
         fixed_image_tio = self.monai_to_torchio(fixed_image)
         resampler = tio.transforms.Resample(pix_dim, image_interpolation=self.tio_mode)
-        #fixed_image_tio = fixed_image_tio.tensor.squeeze().unsqueeze(0).cpu
         resampled_fixed_tio = resampler(fixed_image_tio)
-
         fixed_image = self.update_monai_from_tio(resampled_fixed_tio,fixed_image,filename[:-10] + ".nii.gz")
 
         return fixed_image
@@ -385,9 +439,29 @@ class Preprocesser():
 
 
     def monai_to_torchio(self, monai_dict:dict)->tio.ScalarImage:
+        """
+        takes monai dict and return corresponding tio Image
+
+        Args:
+            monai_dict (dict):
+
+        Returns:
+            tio.ScalarImage:
+        """
         return tio.Image(tensor=monai_dict["image"].squeeze().unsqueeze(0).detach().cpu(), affine=monai_dict["image_meta_dict"]["affine"])
     
-    def update_monai_from_tio(self, tio_image, monai_dict, filename):
+    def update_monai_from_tio(self, tio_image:tio.Image, monai_dict:dict, filename:str) -> dict:
+        """
+        updated monai dict from given tio Image
+
+        Args:
+            tio_image (tio.Image):
+            monai_dict (dict): initial monai dict
+            filename (str): filename to be updated in meta dict
+
+        Returns:
+            dict: updated monai dict
+        """
         to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         add_channel = AddChanneld(keys=["image"])
 

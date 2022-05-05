@@ -1,15 +1,7 @@
 import torchio as tio
 import monai
 from monai.transforms import (
-    AddChanneld,
-    LoadImage,
-    LoadImaged,
-    Orientationd,
-    Rand3DElasticd,
-    RandAffined,
-    Spacingd,
-    ToTensord,
-    RandAffine
+    AddChanneld
 )
 import torchvision as tv
 import os
@@ -23,32 +15,21 @@ import matplotlib.pyplot as plt
 from SVR_Preprocessor import Preprocesser
 from SVR_outlier_removal import outlier_removal
 
-
 class SVR_optimizer():
-    def __init__(self, src_folder, prep_folder, result_folder, stack_filenames, mask_filename, pixdims, device, monai_mode, tio_mode):
+    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, monai_mode:str, tio_mode:str)->None:
         """
         constructer of SVR_optimizer class
-        Parameters
-        ----------
-        src_folder : string
-            initial nifti_files
-        prep_folder : string
-            folder to save prepocessed files
-        stack_filenames : list
-            of filenames of stacks to be reconstructed
-        mask_filename : string
-            nifti filename to crop input images
-        pixdim : list
-            list of pixdims with increasing resolution
-        device : TYPE
-            DESCRIPTION.
-        mode : string
-            interpolation mode
 
-        Returns
-        -------
-        None.
-
+        Args:
+            src_folder (str): initial nifti_files
+            prep_folder (str): folder to save prepocessed files
+            result_folder (str): folder to save reconstruction results
+            stack_filenames (list): of filenames of stacks to be reconstructed
+            mask_filename (str): nifti filename to crop input images
+            pixdims (list): ist of pixdims with increasing resolution
+            device (str): _description_
+            monai_mode (str): interpolation mode for monai resampling
+            tio_mode (str): interpolation mode for monai resampling
         """
         timer = time.time()
         
@@ -57,84 +38,27 @@ class SVR_optimizer():
         self.stack_filenames = stack_filenames
         self.k = len(self.stack_filenames)
         self.mode = monai_mode
-
         self.pixdims = pixdims
         
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
-        self.fixed_images, self.stacks = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0])
+        self.fixed_image, self.stacks = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0])
         
         self.ground_truth = self.stacks
 
         self.tio_mode = tio_mode
           
-    
-    def create_common_volume(self):
-        """
-        Combine updated local stacks that are in common coordinate system, to 
-        one superpositioned volume
 
-        Returns
-        -------
-        world_stack : dictionary
-            contains nifti file of the the reconstructed brain.
+    def construct_slices_from_stack(self, stack:dict):
+        """Constructs slices from a single stack
 
-        """
-        resampler = monai.transforms.ResampleToMatch(mode = self.mode)
-        
-        stacks = self.load_stacks()
-        to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        tmp = stacks[0]["image"]
-        
-        
-        for st in range(1,self.k):
-            image,_ = resampler(stacks[st]["image"], src_meta=stacks[st]["image_meta_dict"], 
-                              dst_meta=stacks[0]["image_meta_dict"])
-            tmp = tmp + image
-        tmp = tmp/self.k
-        world_stack = {"image":tmp, "image_meta_dict": stacks[0]["image_meta_dict"]}
-        world_stack = to_device(world_stack)
-        
-        return world_stack
-    
-    def create_multiresolution_fixed_images(self, pixdims):
-        """
-        Parameters
-        ----------
-        pixdims : list
-            different resolution where first is coarsest
+        Args:
+            stack (dict): stack that should be sliced
 
-        Returns
-        -------
-        fixed_images : list
-            contains initial fixed images, only 0th will be used in the optimization
-            the rest will be used as template for each resolution
-
-        """
-        n_pixdims = len(pixdims)
-        fixed_images = list()
-        
-        for i in range(0,n_pixdims):
-            self.crop_images(upsampling=True, pixdim = pixdims[i])
-            fixed_image = self.create_common_volume_registration()
-            fixed_images.append(fixed_image)
-            
-        return fixed_images
-
-    def construct_slices_from_stack(self, stack):
-        """
-        Constructs slices from a single stack
-
-        Parameters
-        ----------
-        stack : dict
-            stack that should be sliced
-
-        Returns
-        -------
-        slices : list
-            list of slices - each a 5d tensor
-
+        Returns:
+            slices: list of slices - each a 5d tensor
+            n_slices: list of int: number of slice in that slice
+            slice_dim: list of ints: dimension which is sliced
         """
         add_channel = AddChanneld(keys=["image"])
         stack = add_channel(stack)
@@ -167,6 +91,17 @@ class SVR_optimizer():
 
 
     def optimize_volume_to_slice(self, epochs:int, inner_epochs:int, lr, loss_fnc = "ncc", opt_alg = "Adam"):
+        """
+        optimizes transform of individual slices to mitigate motion artefact, uses initial 3d-3d registration
+        implemented in SVR_Preprocessor
+
+        Args:
+            epochs (int): epochs of registration of all stacks
+            inner_epochs (int): epochs of 3d-2d registration of each stack
+            lr (_type_): learning rate of optimizer
+            loss_fnc (str, optional): loss function Defaults to "ncc".
+            opt_alg (str, optional): optimization algorithm Defaults to "Adam".
+        """
         models = list()
         slices = list()
         n_slices = list()
@@ -175,7 +110,6 @@ class SVR_optimizer():
         
         #Afffine transformations for updating common volume from slices (use bilinear because it's 2d transform)
         affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
-        resampler_slices = monai.transforms.ResampleToMatch(mode = self.mode)
         
         for st in range(0,self.k):
             slice_tmp, n_slice, slice_dim = self.construct_slices_from_stack(self.stacks[st])
@@ -190,12 +124,12 @@ class SVR_optimizer():
         loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
         resampler = monai.transforms.ResampleToMatch(mode = self.mode)
         
-        common_volume = t.zeros_like(self.fixed_images["image"])
-        fixed_image_image = self.fixed_images["image"]
-        fixed_image_meta = self.fixed_images["image_meta_dict"]
+        common_volume = t.zeros_like(self.fixed_image["image"])
+        fixed_image_image = self.fixed_image["image"]
+        fixed_image_meta = self.fixed_image["image_meta_dict"]
         
         #use this template for tio-resampling operations of stacks during update
-        tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio(self.fixed_images)
+        tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio(self.fixed_image)
         resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
 
         for epoch in range(0,epochs):
@@ -234,7 +168,7 @@ class SVR_optimizer():
                 
                 likelihood_images = t.ones_like(local_slices, device=self.device)
                 for sl in range(0,n_slices[st]):
-                    #multithe new transform to the existing transform
+                    #multipy the new transform to the existing transform
                     #order second argument is the first transform
 
                     #this is necessary because the reference image was moved by by affines_tmp
@@ -273,27 +207,19 @@ class SVR_optimizer():
                 transformed_slices = affine_transform_slices(local_slices, affines_tmp)
                 transformed_slices = transformed_slices.detach()
                 
+                #update current stack from slices
                 common_stack = t.zeros_like(common_volume)
                 for sl in range(0,n_slices[st]):
                     tmp = transformed_slices[sl,:,:,:,:]
-
                     tmp_tio = tio.Image(tensor=tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack["image_meta_dict"]["affine"])
                     tio_transformed = resampling_to_fixed_tio(tmp_tio)
                     common_stack = common_stack + tio_transformed.tensor.unsqueeze(0)
 
-
-                #common_volume = common_volume + t.div(common_stack, t.max(common_stack)/2047)
+                #update common volume from stack
                 common_volume = common_volume + common_stack
             
-            #common_volume = t.div(common_volume,self.k)
             normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
             common_volume = normalizer(common_volume)
-
-            #common_volume = t.div(common_volume, t.max(common_volume)/2047)
-            # common_volume = self.svr_preprocessor.normalize(common_volume.squeeze().unsqueeze(0))
-            # common_volume = common_volume.unsqueeze(0)
-            #normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
-            #common_volume = normalizer(common_volume)
 
             fixed_image_image = common_volume
             if epoch < epochs - 1:
@@ -303,11 +229,6 @@ class SVR_optimizer():
                 common_volume = t.zeros_like(fixed_image_image)
             else:
                 self.svr_preprocessor.save_intermediate_reconstruction(fixed_image_image,fixed_image_meta,epoch)
-     
-        #world_stack = {"image": common_volume.squeeze().unsqueeze(0), "image_meta_dict": self.fixed_images["image_meta_dict"]}
-        #fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
-        #loss_log = 0
-        #return world_stack, loss_log
     
     def bending_loss_fucntion_single_stack(target_dict_image):
         monai_bending = monai.losses.BendingEnergyLoss()
