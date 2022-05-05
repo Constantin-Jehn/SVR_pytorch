@@ -12,7 +12,7 @@ results_multi_res/
 results_single_res/
 Computational_Graphs/
 tests/
-
+cropped_images/
 
 
 .DS_Store 
