@@ -24,7 +24,7 @@ import SimpleITK as sitk
 import torchvision as tv
 
 class Preprocesser():
-    def __init__(self, src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, mode):
+    def __init__(self, src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode):
         self.device = device
         self.src_folder = src_folder
         self.prep_folder = prep_folder
@@ -32,8 +32,8 @@ class Preprocesser():
         self.stack_filenames = stack_filenames
         self.k = len(self.stack_filenames)
         self.mask_filename = mask_filename
-        self.mode = mode
-        self.tio_mode = "gaussian"
+        self.mode = monai_mode
+        self.tio_mode = tio_mode
 
     def preprocess_stacks_and_common_vol(self, init_pix_dim, save_intermediates=False):
         """

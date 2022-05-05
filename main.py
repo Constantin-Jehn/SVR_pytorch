@@ -79,7 +79,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","four_stacks_gaussian_updates")
+    result_folder = os.path.join("results","four_stacks_gaussian_updates_lr0-0002")
     
     try:
         os.mkdir(result_folder)
@@ -88,12 +88,14 @@ def optimize():
             raise
         pass
     mode = "bicubic"
+
+    tio_mode = "gaussian"
     
-    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, mode = mode)
+    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
     epochs = 3
-    inner_epochs = 5
-    lr = 0.001
+    inner_epochs = 3
+    lr = 0.0002
     loss_fnc = "mi"
     opt_alg = "Adam"
     

@@ -25,7 +25,7 @@ from SVR_outlier_removal import outlier_removal
 
 
 class SVR_optimizer():
-    def __init__(self, src_folder, prep_folder, result_folder, stack_filenames, mask_filename, pixdims, device, mode):
+    def __init__(self, src_folder, prep_folder, result_folder, stack_filenames, mask_filename, pixdims, device, monai_mode, tio_mode):
         """
         constructer of SVR_optimizer class
         Parameters
@@ -56,17 +56,17 @@ class SVR_optimizer():
         print(f'Program runs on: {self.device}')
         self.stack_filenames = stack_filenames
         self.k = len(self.stack_filenames)
-        self.mode = mode
+        self.mode = monai_mode
 
         self.pixdims = pixdims
         
-        self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, mode)
+        self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
         self.fixed_images, self.stacks = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0])
         
         self.ground_truth = self.stacks
 
-        self.tio_mode = "gaussian"
+        self.tio_mode = tio_mode
           
     
     def create_common_volume(self):
@@ -276,9 +276,7 @@ class SVR_optimizer():
                 common_stack = t.zeros_like(common_volume)
                 for sl in range(0,n_slices[st]):
                     tmp = transformed_slices[sl,:,:,:,:]
-                    """ 
-                    can be replaced by torchio Gaussian interpolation
-                    """
+
                     tmp_tio = tio.Image(tensor=tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack["image_meta_dict"]["affine"])
                     tio_transformed = resampling_to_fixed_tio(tmp_tio)
                     common_stack = common_stack + tio_transformed.tensor.unsqueeze(0)
