@@ -10,6 +10,7 @@ data/
 results/
 results_multi_res/
 results_single_res/
+Computational_Graphs
 
 
 .DS_Store 

@@ -79,7 +79,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","four_stacks_initial_gaussian")
+    result_folder = os.path.join("results","four_stacks_gaussian_updates")
     
     try:
         os.mkdir(result_folder)
@@ -91,8 +91,8 @@ def optimize():
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, mode = mode)
     
-    epochs = 1
-    inner_epochs = 3
+    epochs = 3
+    inner_epochs = 5
     lr = 0.001
     loss_fnc = "mi"
     opt_alg = "Adam"
@@ -100,5 +100,5 @@ def optimize():
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, loss_fnc=loss_fnc, opt_alg=opt_alg)
     
 if __name__ == '__main__':
-    #optimize()
-    preprocess()
+    optimize()
+    #preprocess()

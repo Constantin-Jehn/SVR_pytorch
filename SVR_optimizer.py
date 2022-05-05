@@ -65,6 +65,8 @@ class SVR_optimizer():
         self.fixed_images, self.stacks = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0])
         
         self.ground_truth = self.stacks
+
+        self.tio_mode = "gaussian"
           
     
     def create_common_volume(self):
@@ -192,6 +194,10 @@ class SVR_optimizer():
         fixed_image_image = self.fixed_images["image"]
         fixed_image_meta = self.fixed_images["image_meta_dict"]
         
+        #use this template for tio-resampling operations of stacks during update
+        tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio(self.fixed_images)
+        resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
+
         for epoch in range(0,epochs):
             print(f'\n\n Epoch: {epoch}')
 
@@ -273,15 +279,19 @@ class SVR_optimizer():
                     """ 
                     can be replaced by torchio Gaussian interpolation
                     """
-                    slice_resampled, _ = resampler_slices(tmp, src_meta = local_stack["image_meta_dict"], dst_meta = fixed_image_meta)
-                    slice_resampled = slice_resampled.unsqueeze(0)
-                    slice_resampled = self.svr_preprocessor.denoise_single_slice(slice_resampled.squeeze().unsqueeze(0))
-                    common_stack = common_stack + slice_resampled.unsqueeze(0)
+                    tmp_tio = tio.Image(tensor=tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack["image_meta_dict"]["affine"])
+                    tio_transformed = resampling_to_fixed_tio(tmp_tio)
+                    common_stack = common_stack + tio_transformed.tensor.unsqueeze(0)
+
+
                 #common_volume = common_volume + t.div(common_stack, t.max(common_stack)/2047)
                 common_volume = common_volume + common_stack
             
             #common_volume = t.div(common_volume,self.k)
-            common_volume = t.div(common_volume, t.max(common_volume)/2047)
+            normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
+            common_volume = normalizer(common_volume)
+
+            #common_volume = t.div(common_volume, t.max(common_volume)/2047)
             # common_volume = self.svr_preprocessor.normalize(common_volume.squeeze().unsqueeze(0))
             # common_volume = common_volume.unsqueeze(0)
             #normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
