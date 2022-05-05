@@ -32,20 +32,21 @@ def preprocess():
     
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
-    pixdims = [(2.5,2.5,2.5),(2.0,2.0,2.0),(1.5,1.5,1.5),(1.1,1.1,1.1)]
+    pixdims = [(1.0,1.0,1.0),(2.0,2.0,2.0),(1.5,1.5,1.5),(1.1,1.1,1.1)]
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
+    result_folder = os.path.join("results","preprocessing_gaussian")
     mode = "bicubic"
     
-    svr_preprocessor = Preprocesser(src_folder, prep_folder, filenames, file_mask,pixdims, device, mode = mode)
-    fixed_images, stacks = svr_preprocessor.preprocess_stacks_and_common_vol(save_intermediates=True)
+    svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, filenames, file_mask, device, mode)
+    fixed_images, stacks = svr_preprocessor.preprocess_stacks_and_common_vol(init_pix_dim = pixdims[0], save_intermediates=True)
     svr_preprocessor.save_stacks(stacks,'out')
     
     fixed_images["image"] = t.squeeze(fixed_images["image"]).unsqueeze(0)
     
-    folder = "preprocessing"
+    folder = "preprocessing_gaussian"
     path = os.path.join(folder)
     nifti_saver = monai.data.NiftiSaver(output_dir=path, 
                                         resample = False, mode = mode, padding_mode = "zeros",
@@ -88,7 +89,6 @@ def optimize():
         pass
     mode = "bicubic"
     
-    
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, mode = mode)
     
     epochs = 1
@@ -100,5 +100,5 @@ def optimize():
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, loss_fnc=loss_fnc, opt_alg=opt_alg)
     
 if __name__ == '__main__':
-    optimize()
-    #preprocess()
+    #optimize()
+    preprocess()

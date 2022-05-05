@@ -21,7 +21,7 @@ from copy import deepcopy
 import loss_module
 import time
 import SimpleITK as sitk
-
+import torchvision as tv
 
 class Preprocesser():
     def __init__(self, src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, mode):
@@ -59,6 +59,12 @@ class Preprocesser():
 
         if save_intermediates:
             stacks = self.save_stacks(stacks, 'den')
+
+        
+        stacks = self.normalize(stacks)
+        if save_intermediates:
+            stacks = self.save_stacks(stacks, 'norm')
+        # self.fixed_images = add_channel(self.fixed_images)
         # self.bias_correction_sitk(stacks)
         fixed_images, stacks = self.create_common_volume_registration(stacks)
 
@@ -67,13 +73,9 @@ class Preprocesser():
         if save_intermediates:
             stacks = self.save_stacks(stacks, 'reg')
 
-        fixed_images, stacks = self.histogram_normalize(fixed_images, stacks)
-        if save_intermediates:
-            stacks = self.save_stacks(stacks, 'norm')
-        # self.fixed_images = add_channel(self.fixed_images)
         for st in range(0, len(stacks)):
             stacks[st]["image"] = stacks[st]["image"].squeeze().unsqueeze(0)
-        #fixed_images["image"] = fixed_images["image"].squeeze().unsqueeze(0)
+
         return fixed_images, stacks
 
     def get_cropped_stacks(self):
@@ -266,7 +268,9 @@ class Preprocesser():
 
             common_tensor = common_tensor + stacks[st]["image"]
 
-        common_tensor = t.div(common_tensor, t.max(common_tensor)/2047)
+        normalizer = tv.transforms.Normalize(t.mean(common_tensor), t.std(common_tensor))
+        common_tensor = normalizer(common_tensor)
+        #common_tensor = t.div(common_tensor, t.max(common_tensor)/2047)
 
         return {"image": common_tensor.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta}, stacks
 
@@ -300,7 +304,7 @@ class Preprocesser():
             stacks[st]["image"] = normalizer(stacks[st]["image"])
         return fixed_images, stacks
 
-    def normalize(self, fixed_image_image):
+    def histogram_normalize(self, fixed_image_image):
         """
         normalizes fixed_image_image using Histogram
         """
@@ -308,6 +312,13 @@ class Preprocesser():
             max=2047, num_bins=2048)
         fixed_image_image = normalizer(fixed_image_image)
         return fixed_image_image
+
+    def normalize(self,stacks):
+        for st in range(0,len(stacks)):
+            st_tensor = stacks[st]["image"]
+            normalizer = tv.transforms.Normalize(t.mean(st_tensor), t.std(st_tensor))
+            stacks[st]["image"] = normalizer(st_tensor)
+        return stacks
 
     def save_stacks(self, stacks, post_fix):
         folder = "preprocessing"
