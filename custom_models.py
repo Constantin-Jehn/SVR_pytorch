@@ -20,40 +20,45 @@ from copy import deepcopy
 import numpy as np
 
 
-class Reconstruction(t.nn.Module):
-    def __init__(self, n_slices:int, device):
+class Volume_to_Volume(t.nn.Module):
+    """
+    class to perform 3d-3d registration for initial alignment, fixed_image_volume is aligned to stack by inv_affine
+    affine can be used later to resample stack to the fixed_volume
+    """
+    def __init__(self, device):
         super().__init__()
         
+        
         self.device = device
-        self.n_slices = n_slices
-        self.rotations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
-        self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
+        self.rotations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(1)])
+        self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(1)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
     
-    def forward(self, im_slices, ground_meta, fixed_image_meta, transform_to_fixed = True, mode = "bilinear"):
-        
+    def forward(self, fixed_volume_tensor:t.tensor, fixed_volume_meta:dict, stack_meta:dict, mode = "bilinear"):
+        """
+        fixed_volume_image: te
+        """
         resampler = monai.transforms.ResampleToMatch(mode = mode)
         
-        affines = self.create_T(self.rotations[0], self.translations[0]).unsqueeze(0)
-        for sli in range(1,self.n_slices):
-            affines = t.cat((affines,self.create_T(self.rotations[sli], self.translations[sli]).unsqueeze(0)),0)
-            
-        im_slices = self.affine_layer(im_slices, affines)
-
-        if transform_to_fixed:
-            
-            transformed_size = (self.n_slices,1) + tuple(fixed_image_meta["spatial_shape"])
-            transformed_slices = t.zeros(transformed_size)
-            
-            for sli in range(0,self.n_slices):
-                transformed_slices[sli,:,:,:,:], _ = resampler(im_slices[sli,:,:,:,:],src_meta = ground_meta, 
-                                                               dst_meta = fixed_image_meta, padding_mode = "zeros")
-            return transformed_slices  
+        #create affines and inv affines
+        aff = self.create_T(self.rotations[0], self.translations[0])
+        inv_aff = t.linalg.inv(aff)
+        affines = aff.unsqueeze(0)
+        inv_affines = inv_aff.unsqueeze(0)
         
-        else:
-            return im_slices
+        #prepare fixed_volume tensor, resmapl
+        fixed_volume_tensor = fixed_volume_tensor.squeeze().unsqueeze(0)
+        fixed_volume_tensor, fixed_volume_meta = resampler(fixed_volume_tensor,src_meta=fixed_volume_meta,
+                         dst_meta=stack_meta)
+        fixed_volume_meta["spatial_shape"] = np.array(list(fixed_volume_tensor.shape)[1:])
+        fixed_volume_tensor_batch = fixed_volume_tensor.unsqueeze(0)
+        
+
+        fixed_volume_tensor_transformed = self.affine_layer(fixed_volume_tensor_batch, inv_affines)
+
+        return fixed_volume_tensor_transformed, affines
     
-    def create_T(self,rotations, translations):
+    def create_T(self,rotations:list, translations:list) -> t.tensor:
         """
         Parameters
         ----------
@@ -76,6 +81,10 @@ class Reconstruction(t.nn.Module):
 
         
 class Volume_to_Slice(t.nn.Module):
+    """
+    class to perform 3d-2d registration, aligns the fixed image to a slice by "inv_affines",
+    affine can be used later to resample the slice to the fixed image
+    """
     def __init__(self, n_slices:int, device):
         super().__init__()
         

@@ -161,151 +161,9 @@ class SVR_optimizer():
                 tmp[:,:,:,:,i+1:] = 0
                 slices[i,:,:,:,:] = tmp
         return slices, n_slices, slice_dim
-    
-    def optimize_multiple_stacks(self, epochs:int, inner_epochs:int, lr, multi_res = False,  loss_fnc = "ncc", opt_alg = "Adam"):
-        """
-        Parameters
-        ----------
-        epochs : integer
-            epochs of 2D/3D registration per stack
-        lr : float
-            optimization hyperparameter
-        loss_fnc : string, optional
-             The default is "ncc".
-        opt_alg : string, optional
-            DESCRIPTION. The default is "Adam".
 
-        Returns
-        -------
-        world_stack : dict
-            reconstruncted volume
-        loss_log : list
-            list of losses
 
-        """
-        models = list()
-        #create model for each stack 
-        slices = list()
-        slice_dims = list()
-        for st in range (0,self.k):
-            slice_tmp, n_slices, slice_dim = self.construct_slices_from_stack(self.stacks[st])
-            slices.append(slice_tmp)
-            slice_dims.append(slice_dim)
-            #n_slices = self.ground_truth[st]["image"].shape[-1]
-            models.append(custom_models.Reconstruction(n_slices = n_slices, device = self.device))
-        
-        #resampling_model = custom_models.ResamplingToFixed()
-        #resampling_model.to(self.device)
-        
-        loss = loss_module.RegistrationLoss(loss_fnc, self.device)
-    
-        loss_log = np.zeros((epochs,self.k,inner_epochs))
-        
-        resampler = monai.transforms.ResampleToMatch(mode = self.mode)
-        
-        if multi_res:
-            common_volume = t.zeros_like(self.fixed_images[0]["image"])
-        else:
-            common_volume = t.zeros_like(self.fixed_images["image"])
-            fixed_image = self.fixed_images
-            
-        for epoch in range(0,epochs):
-            if multi_res:
-                fixed_image = self.fixed_images[epoch]
-                if epoch > 0:
-                    common_volume = common_volume.squeeze().unsqueeze(0)
-                    fixed_image["image"],_ = resampler(common_volume,src_meta=self.fixed_images[epoch - 1]["image_meta_dict"],
-                                                     dst_meta = fixed_image["image_meta_dict"])
-                    
-                    fixed_image["image"] = fixed_image["image"].unsqueeze(0)
-                    common_volume = t.zeros_like(fixed_image["image"])
-            else:
-                if epoch > 0:
-                    fixed_image["image"] = common_volume
-                    common_volume = t.zeros_like(self.fixed_images["image"])
-                
-            
-            #self.initial_vol["image"] = t.zeros_like(self.fixed_image["image"])
 
-            print(f'\n\n Epoch: {epoch}')
-            
-            #plt.imshow(self.fixed_image["image"][0,0,:,:,20].detach().numpy())
-            #plt.show()
-            
-            for st in range(0,self.k):
-                #loss_stack = list()
-                print(f"\n  stack: {st}")
-                model = models[st]
-                model.to(self.device)
-                
-                #in batch first shape
-                slices_tmp = slices[st]
-                
-                if opt_alg == "SGD":
-                    optimizer = t.optim.SGD(model.parameters(), lr = lr)
-                elif(opt_alg == "Adam"):
-                    optimizer = t.optim.Adam(model.parameters(), lr = lr)
-                else:
-                    assert("Choose SGD or Adam as optimizer")
-
-                local_stack = self.ground_truth[st]
-                
-                for inner_epoch in range(0,inner_epochs):
-                    model.train()
-                    optimizer.zero_grad()
-                    timer = time.time()
-                    transformed_slices = model(slices_tmp.detach(), local_stack["image_meta_dict"], fixed_image["image_meta_dict"], transform_to_fixed = True, mode = self.mode)
-                    transformed_slices = transformed_slices.to(self.device)
-                    print(f'forward pass. {time.time() - timer} s ')
-                    
-                    #dot = make_dot(transformed_slices[0,:,:,:,:], params = dict(model.named_parameters()))
-                    
-                    timer = time.time()
-                    loss_tensor = loss(transformed_slices, fixed_image)
-                    
-                    print(f'loss:  {time.time() - timer} s ')
-                    
-                    print(f'Epoch: {epoch} loss: {loss_tensor.item()}')
-                    timer = time.time()
-                    
-                    loss_tensor.backward(retain_graph = False)
-                    
-                    print(f'backward:  {time.time() - timer} s ')
-                    print(f'loss: {loss_tensor.item()}')
-                    loss_log[epoch,st,inner_epoch] = loss_tensor
-                    timer = time.time()
-                    optimizer.step()
-                    print(f'optimizer:  {time.time() - timer} s ')
-
-                #update common_volume
-                transformed_slices = transformed_slices.detach()
-                
-                
-                #if loss was applied in hr
-                common_volume = common_volume + t.sum(transformed_slices, dim = 0).unsqueeze(0)
-                
-                # for sl in range(0,transformed_slices.shape[0]):
-                #     sli = transformed_slices[sl,:,:,:,:]
-                #     resampled, _ = resampler(sli, src_meta=self.ground_truth[st]["image_meta_dict"], dst_meta = self.fixed_image["image_meta_dict"])
-                #     self.initial_vol["image"] = self.initial_vol["image"] + resampled.unsqueeze(0)
-
-                print('inital_updated')
-                
-                
-            common_volume = t.div(common_volume, self.k)
-            
-            #self.fixed_image["image"] = self.initial_vol["image"]
-            
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    print (f'parameter {name} has value not equal to zero: {t.all(param.data == 0)}')
-            
-        #cast to image format
-        fixed_image["image"] = common_volume
-        fixed_image["image"] = t.squeeze(fixed_image["image"]).unsqueeze(0)
-        #loss_log = 0
-        return fixed_image, loss_log
-    
     def optimize_volume_to_slice(self, epochs:int, inner_epochs:int, lr, loss_fnc = "ncc", opt_alg = "Adam"):
         models = list()
         slices = list()
@@ -327,7 +185,7 @@ class SVR_optimizer():
             affines_slices.append(t.eye(4, device=self.device).unsqueeze(0).repeat(n_slice,1,1))
             
                           
-        loss = loss_module.RegistrationLossSlice(loss_fnc, self.device)
+        loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
         resampler = monai.transforms.ResampleToMatch(mode = self.mode)
         
         common_volume = t.zeros_like(self.fixed_images["image"])
@@ -372,6 +230,8 @@ class SVR_optimizer():
                 for sl in range(0,n_slices[st]):
                     #multithe new transform to the existing transform
                     #order second argument is the first transform
+
+                    #this is necessary because the reference image was moved by by affines_tmp
                     affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
 
                     slice_dim = slice_dims[st]
@@ -398,12 +258,9 @@ class SVR_optimizer():
                         likelihood_images[sl,0,:,:,sl] = p
 
 
-                #multiply likelihood to each voxel
-                local_slices = t.mul(local_slices,likelihood_images)
-                """
-                ToDo:
-                Apply outlier removal --> get likelihood_image and multiply to affine_slices Before transformation
-                """
+                #multiply likelihood to each voxel for outlier removal
+                
+                #local_slices = t.mul(local_slices,likelihood_images)
 
                 affines_tmp = affines_slices[st]
                 #apply affines to transform slices
@@ -413,6 +270,9 @@ class SVR_optimizer():
                 common_stack = t.zeros_like(common_volume)
                 for sl in range(0,n_slices[st]):
                     tmp = transformed_slices[sl,:,:,:,:]
+                    """ 
+                    can be replaced by torchio Gaussian interpolation
+                    """
                     slice_resampled, _ = resampler_slices(tmp, src_meta = local_stack["image_meta_dict"], dst_meta = fixed_image_meta)
                     slice_resampled = slice_resampled.unsqueeze(0)
                     slice_resampled = self.svr_preprocessor.denoise_single_slice(slice_resampled.squeeze().unsqueeze(0))
@@ -444,3 +304,14 @@ class SVR_optimizer():
     def bending_loss_fucntion_single_stack(target_dict_image):
         monai_bending = monai.losses.BendingEnergyLoss()
         return monai_bending(target_dict_image.expand(-1,3,-1,-1,-1))
+
+"""
+               for name, param in model.named_parameters():
+                if param.requires_grad:
+                    print (f'parameter {name} has value not equal to zero: {t.all(param.data == 0)}')
+
+
+            timer = time.time()
+                    optimizer.step()
+                    print(f'optimizer:  {time.time() - timer} s ')
+"""

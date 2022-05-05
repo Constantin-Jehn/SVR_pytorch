@@ -33,6 +33,7 @@ class Preprocesser():
         self.k = len(self.stack_filenames)
         self.mask_filename = mask_filename
         self.mode = mode
+        self.tio_mode = "gaussian"
 
     def preprocess_stacks_and_common_vol(self, init_pix_dim, save_intermediates=False):
         """
@@ -128,12 +129,12 @@ class Preprocesser():
             if upsampling:
                 if i == 0:
                     # only upsample first stack, for remaining stack it's done by resamplich to this stack
-                    upsampler = tio.transforms.Resample(pixdim)
+                    upsampler = tio.transforms.Resample(pixdim, image_interpolation = self.tio_mode)
                     cropped_stack = upsampler(cropped_stack)
                 else:
                     path_stack = os.path.join(
                         self.prep_folder, self.stack_filenames[0])
-                    resampler = tio.transforms.Resample(path_stack)
+                    resampler = tio.transforms.Resample(path_stack, image_interpolation = self.tio_mode)
                     cropped_stack = resampler(cropped_stack)
 
             path_dst = os.path.join(self.prep_folder, filename)
@@ -226,38 +227,48 @@ class Preprocesser():
         path = os.path.join(folder)
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         stacks[0]["image"] = stacks[0]["image"].unsqueeze(0)
-        fixed_meta = stacks[0]["image_meta_dict"]
+        fixed_meta = deepcopy(stacks[0]["image_meta_dict"])
         fixed_meta["filename_or_obj"] = "reconstruction_volume.nii.gz"
-        common_image = stacks[0]["image"].unsqueeze(0)
+        common_tensor = stacks[0]["image"].unsqueeze(0)
+
+        affine_transform_monai = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
+
+        tio_common_image = self.monai_to_torchio(stacks[0])
+        resample_to_common = tio.transforms.Resample(tio_common_image, image_interpolation=self.tio_mode)
 
         for st in range(1, self.k):
-            image = stacks[st]["image"].unsqueeze(0)
-            meta = stacks[st]["image_meta_dict"]
+            stack_tensor = stacks[st]["image"].unsqueeze(0)
+            stack_meta = stacks[st]["image_meta_dict"]
 
-            model = custom_models.Reconstruction(
-                n_slices=1, device=self.device)
-            loss = loss_module.RegistrationLoss("ncc", self.device)
+            model = custom_models.Volume_to_Volume(device=self.device)
+            loss = loss_module.Loss_Volume_to_Volume("ncc", self.device)
             optimizer = t.optim.Adam(model.parameters(), lr=0.001)
+            affine = t.eye(4)
 
             for ep in range(0, 15):
-                transformed = model(image.detach(), meta,
-                                    fixed_meta, transform_to_fixed=True)
-                transformed = transformed.to(self.device)
-                loss_tensor = loss(transformed, stacks[0])
+                transformed_fixed_tensor, affine_tmp = model(common_tensor.detach(),fixed_meta,stack_meta)
+                transformed_fixed_tensor = transformed_fixed_tensor.to(self.device)
+                loss_tensor = loss(transformed_fixed_tensor,stack_tensor)
                 loss_tensor.backward()
+
                 if ep < 14:
                     optimizer.step()
 
-            transformed = transformed.detach()
+            transformed_fixed_tensor = transformed_fixed_tensor.detach()
 
-            common_image = common_image + transformed
+            stacks[st]["image"] = affine_transform_monai(stack_tensor, affine_tmp)
 
-            #stacks[st]["image"],stacks[st]["image_meta_dict"]["affine"], stacks[st]["image_meta_dict"]["spatial_shape"] = transformed, fixed_meta["affine"], fixed_meta["spatial_shape"]
-            pre_registered = model(stacks[st]["image"].unsqueeze(
-                0), meta, fixed_meta, transform_to_fixed=False)
-            stacks[st]["image"] = pre_registered
+            tio_stack = self.monai_to_torchio(stacks[st])
+            
+            tio_stack = resample_to_common(tio_stack) 
 
-        return {"image": common_image.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta}, stacks
+            stacks[st] = self.update_monai_from_tio(tio_stack,stacks[st],stacks[st]["image_meta_dict"]["filename_or_obj"])
+
+            common_tensor = common_tensor + stacks[st]["image"]
+
+        common_tensor = t.div(common_tensor, t.max(common_tensor)/2047)
+
+        return {"image": common_tensor.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta}, stacks
 
     def histogram_normalize(self, fixed_images, stacks):
         """
@@ -282,37 +293,11 @@ class Preprocesser():
         normalizer = monai.transforms.HistogramNormalize(
             max=2047, num_bins=2048)
 
-        path_mask = os.path.join(self.src_folder, self.mask_filename)
-        mask_dict = {"image": path_mask}
-        mask = loader(mask_dict)
 
-        mask = to_tensor(mask)
-        mask = add_channel(mask)
-
-        mask["image"], mask["image_meta_dict"] = resampler(mask["image"], src_meta=mask["image_meta_dict"],
-                                                           dst_meta=fixed_images["image_meta_dict"])
-        mask["image_meta_dict"]["spatial_shape"] = np.array(
-            list(mask["image"].shape)[1:])
-
-        mask = add_channel(mask)
 
         fixed_images["image"] = normalizer(fixed_images["image"])
-
-        mask["image"] = mask["image"].squeeze().unsqueeze(0)
-
         for st in range(0, self.k):
-            mask["image"], mask["image_meta_dict"] = resampler(mask["image"], src_meta=mask["image_meta_dict"],
-                                                               dst_meta=stacks[st]["image_meta_dict"])
-            mask["image_meta_dict"]["spatial_shape"] = np.array(
-                list(mask["image"].shape)[1:])
-
-            mask = add_channel(mask)
-
-            stacks[st]["image"] = normalizer(
-                stacks[st]["image"], mask["image"])
-
-            mask["image"] = mask["image"].squeeze().unsqueeze(0)
-
+            stacks[st]["image"] = normalizer(stacks[st]["image"])
         return fixed_images, stacks
 
     def normalize(self, fixed_image_image):
@@ -356,12 +341,12 @@ class Preprocesser():
         add_channel = AddChanneld(keys=["image"])
         # resample using torchio
         tio_image = tio.Image(tensor=fixed_image_image.squeeze().unsqueeze(0).cpu(), affine=fixed_image_meta["affine"])
-        resampler = tio.transforms.Resample(pix_dim, image_interpolation="gaussian")
+        resampler = tio.transforms.Resample(pix_dim, image_interpolation=self.tio_mode)
         tio_resampled = resampler(tio_image)
-        monai_resampled = self.update_monai_from_tio(tio_resampled,{"image":fixed_image_image, "image_meta_dict": fixed_image_meta})
-        monai_resampled["image_meta_dict"]["filename_or_obj"] = filename[:-10] + ".nii.gz"
-        monai_resampled = to_device(monai_resampled)
-        monai_resampled = add_channel(monai_resampled)
+
+        filename = filename[:-10] + ".nii.gz"
+        monai_resampled = self.update_monai_from_tio(tio_resampled,{"image":fixed_image_image, "image_meta_dict": fixed_image_meta}, filename)
+
         return monai_resampled
 
     def resample_fixed_image(self, fixed_image, pix_dim):
@@ -374,43 +359,35 @@ class Preprocesser():
             0), meta_data=fixed_image["image_meta_dict"])
 
         fixed_image["image_meta_dict"]["filename_or_obj"] = filename[:-10] + ".nii.gz"
-
         filename = filename[:-7] + "_" + f"{-1:02}" + ".nii.gz"
+
         path = os.path.join(self.result_folder, filename)
-        fixed_image = tio.ScalarImage(path)
+        fixed_image_tio = self.monai_to_torchio(fixed_image)
+        resampler = tio.transforms.Resample(pix_dim, image_interpolation=self.tio_mode)
+        #fixed_image_tio = fixed_image_tio.tensor.squeeze().unsqueeze(0).cpu
+        resampled_fixed_tio = resampler(fixed_image_tio)
 
-        resampler = tio.transforms.Resample(pix_dim)
-        resamped_fixed = resampler(fixed_image)
+        fixed_image = self.update_monai_from_tio(resampled_fixed_tio,fixed_image,filename[:-10] + ".nii.gz")
 
-        resamped_fixed.save(path)
-        # load as nifti file and return
+        return fixed_image
 
-        add_channel = AddChanneld(keys=["image"])
-        loader = LoadImaged(keys=["image"])
-        to_tensor = ToTensord(keys=["image"])
-        to_device = monai.transforms.ToDeviced(
-            keys=["image"], device=self.device)
-        fixed_dict = {"image": path}
-        fixed_dict = loader(fixed_dict)
-        fixed_dict = to_tensor(fixed_dict)
-        fixed_dict = add_channel(fixed_dict)
-        fixed_dict = add_channel(fixed_dict)
-        # keep meta data correct
-        fixed_dict["image_meta_dict"]["spatial_shape"] = np.array(
-            list(fixed_dict["image"].shape)[2:])
-        fixed_dict["image_meta_dict"]["filename_or_obj"] = filename[:-10] + ".nii.gz"
-        # move to gpu
-        fixed_dict = to_device(fixed_dict)
 
-        return fixed_dict
 
-    def monai_to_torchio(self, monai_dict):
-        return tio.Image(tensor=monai_dict["image"], affine=monai_dict["image_meta_dict"]["affine"])
+    def monai_to_torchio(self, monai_dict:dict)->tio.ScalarImage:
+        return tio.Image(tensor=monai_dict["image"].squeeze().unsqueeze(0).detach().cpu(), affine=monai_dict["image_meta_dict"]["affine"])
     
-    def update_monai_from_tio(self, tio_image, monai_dict):
+    def update_monai_from_tio(self, tio_image, monai_dict, filename):
+        to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
+        add_channel = AddChanneld(keys=["image"])
+
         monai_dict["image"] = tio_image.tensor
         monai_dict["image_meta_dict"]["affine"] = tio_image.affine
         monai_dict["image_meta_dict"]["spatial_shape"] = np.array(list(tio_image.tensor.shape)[1:])
+        monai_dict["image_meta_dict"]["filename_or_obj"] = filename
+
+        monai_dict = to_device(monai_dict)
+        monai_dict = add_channel(monai_dict)
+
         return monai_dict
 
     
