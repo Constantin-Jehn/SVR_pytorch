@@ -218,7 +218,7 @@ class SVR_optimizer():
                 common_stack = t.zeros_like(common_volume, device=self.device)
                 for sl in range(0,n_slices[st]):
                     tmp = transformed_slices[sl,:,:,:,:]
-                    tmp_tio = tio.ScalarImage(tensor=tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack["image_meta_dict"]["affine"])
+                    tmp_tio = tio.Image(tensor=tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack["image_meta_dict"]["affine"])
                     tio_transformed = resampling_to_fixed_tio(tmp_tio)
                     common_stack = common_stack + tio_transformed.tensor.unsqueeze(0).to(self.device)
                 print(f'common vol update:  {time.time() - timer} s ')

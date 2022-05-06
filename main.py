@@ -64,12 +64,12 @@ def optimize():
     
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
-    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
+    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.2,1.2,1.2),(1.1,1.1,1.1),(1.0,1.0,1.0)]
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","gaussian_update_plus_outlier")
+    result_folder = os.path.join("results","gaussian_outlier_removal_5_4_lr0-0001_pix1")
     
     try:
         os.mkdir(result_folder)
