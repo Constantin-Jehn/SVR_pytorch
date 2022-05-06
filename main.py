@@ -1,16 +1,5 @@
 import matplotlib.pyplot as plt
 import monai
-from monai.transforms import (
-    AddChanneld,
-    LoadImage,
-    LoadImaged,
-    Orientationd,
-    Rand3DElasticd,
-    RandAffined,
-    Spacingd,
-    ToTensord,
-    RandAffine
-)
 import os
 import numpy as np
 import torch as t
@@ -58,7 +47,7 @@ def preprocess():
 
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-    
+    """
     filenames = ["10_3T_nody_001.nii.gz",
                 
                 "14_3T_nody_001.nii.gz"]
@@ -71,16 +60,16 @@ def optimize():
                 "21_3T_nody_001.nii.gz",
                 
                 "23_3T_nody_001.nii.gz"]
-    """
+    
     
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
-    pixdims = [(1.5, 1.5, 1.5),(1.4,1.4,1.4),(1.3,1.3,1.3),(1.2,1.2,1.2),(1.1,1.1,1.1),(1.0,1.0,1.0)]
+    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","gaussian_outlier_removal_5_4_lr0-0001")
+    result_folder = os.path.join("results","gaussian_update_plus_outlier")
     
     try:
         os.mkdir(result_folder)
@@ -94,8 +83,8 @@ def optimize():
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
-    epochs = 5
-    inner_epochs = 4
+    epochs = 3
+    inner_epochs = 3
     lr = 0.0001
     loss_fnc = "mi"
     opt_alg = "Adam"

@@ -49,10 +49,10 @@ class Preprocesser():
 
         Args:
             init_pix_dim (tuple): initial resolution of the fixed image
-            save_intermediates (bool, optional):whether to save intermediate steps of preprocessing Defaults to False.
+            save_intermediates (bool, optional):whether to save intermediate steps of preprocessing. Default to False.
 
         Returns:
-            tuple: _description_
+            tuple: initial fixed volume, pre registered stacks
         """
 
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
@@ -101,8 +101,6 @@ class Preprocesser():
             upsampling (bool, optional): whether or not to upsample fixed image Defaults to False.
             pixdim (int, optional): pix dim to upsample to. Defaults to 0.
         """
-
-
         path_mask = os.path.join(self.src_folder, self.mask_filename)
         mask = tio.LabelMap(path_mask)
         path_dst = os.path.join(self.prep_folder, self.mask_filename)
@@ -224,22 +222,17 @@ class Preprocesser():
             path = os.path.join(self.prep_folder, self.stack_filenames[st])
             sitk.WriteImage(denoised_image, path)
 
-    def create_common_volume_registration(self, stacks):
+    def create_common_volume_registration(self, stacks:list)->tuple:
         """
         creates common volume and return registered stacks
 
-        Parameters
-        ----------
-        stacks : list
+        Args:
+            stacks (list): initial stacks
 
-        Returns
-        -------
-        dict
-            common volume
-        stacks : list
-            registered stacks
-
+        Returns:
+            tuple: inital fixed image, list of preregistered stacks
         """
+
         folder = "preprocessing"
         path = os.path.join(folder)
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
@@ -381,7 +374,9 @@ class Preprocesser():
         ).unsqueeze(0), meta_data=fixed_image_meta)
 
     def save_intermediate_reconstruction_and_upsample(self, fixed_image_tensor:t.tensor, fixed_image_meta:dict, epoch:int, pix_dim:tuple)->dict:
-        """_summary_
+        """
+        saves reconstruction of current epoch;
+        upsamples fixed image to following resolution for multi resolution approach
 
         Args:
             fixed_image_tensor (t.tensor): tensor of fixed image
@@ -396,7 +391,7 @@ class Preprocesser():
         filename = fixed_image_meta["filename_or_obj"]
         filename = filename[:-7] + "_" + f"{epoch:02}" + ".nii.gz"
         # resample using torchio
-        tio_image = tio.Image(tensor=fixed_image_tensor.squeeze().unsqueeze(0).cpu(), affine=fixed_image_meta["affine"])
+        tio_image = tio.ScalarImage(tensor=fixed_image_tensor.squeeze().unsqueeze(0).cpu(), affine=fixed_image_meta["affine"])
         resampler = tio.transforms.Resample(pix_dim, image_interpolation=self.tio_mode)
         tio_resampled = resampler(tio_image)
 
@@ -436,8 +431,6 @@ class Preprocesser():
 
         return fixed_image
 
-
-
     def monai_to_torchio(self, monai_dict:dict)->tio.ScalarImage:
         """
         takes monai dict and return corresponding tio Image
@@ -448,9 +441,9 @@ class Preprocesser():
         Returns:
             tio.ScalarImage:
         """
-        return tio.Image(tensor=monai_dict["image"].squeeze().unsqueeze(0).detach().cpu(), affine=monai_dict["image_meta_dict"]["affine"])
+        return tio.ScalarImage(tensor=monai_dict["image"].squeeze().unsqueeze(0).detach().cpu(), affine=monai_dict["image_meta_dict"]["affine"])
     
-    def update_monai_from_tio(self, tio_image:tio.Image, monai_dict:dict, filename:str) -> dict:
+    def update_monai_from_tio(self, tio_image:tio.ScalarImage, monai_dict:dict, filename:str) -> dict:
         """
         updated monai dict from given tio Image
 
@@ -475,5 +468,3 @@ class Preprocesser():
         monai_dict = add_channel(monai_dict)
 
         return monai_dict
-
-    

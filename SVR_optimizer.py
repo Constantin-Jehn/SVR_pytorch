@@ -152,6 +152,7 @@ class SVR_optimizer():
                 local_stack = self.stacks[st]
                 local_slices = slices[st]
                 
+                #optimization procedure
                 for inner_epoch in range(0,inner_epochs):
                     model.train()
                     optimizer.zero_grad()
@@ -168,14 +169,18 @@ class SVR_optimizer():
                     
                     optimizer.step()
                 
+
+                #update procedure
                 likelihood_images = t.ones_like(local_slices, device=self.device)
+
+                timer = time.time()
                 for sl in range(0,n_slices[st]):
                     #multipy the new transform to the existing transform
                     #order second argument is the first transform
-
                     #this is necessary because the reference image was moved by by affines_tmp
                     affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
 
+                    #outlier removal
                     slice_dim = slice_dims[st]
                     if slice_dim == 0:
                         pred = tr_fixed_images[sl,0,sl,:,:]
@@ -198,10 +203,9 @@ class SVR_optimizer():
                         likelihood_images[sl,0,:,sl,:] = p
                     elif slice_dim == 2:
                         likelihood_images[sl,0,:,:,sl] = p
-
+                print(f'outlier removal:  {time.time() - timer} s ')
 
                 #multiply likelihood to each voxel for outlier removal
-                
                 local_slices = t.mul(local_slices,likelihood_images)
 
                 affines_tmp = affines_slices[st]
@@ -210,19 +214,21 @@ class SVR_optimizer():
                 transformed_slices = transformed_slices.detach()
                 
                 #update current stack from slices
+                timer = time.time()
                 common_stack = t.zeros_like(common_volume, device=self.device)
                 for sl in range(0,n_slices[st]):
                     tmp = transformed_slices[sl,:,:,:,:]
-                    tmp_tio = tio.Image(tensor=tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack["image_meta_dict"]["affine"])
+                    tmp_tio = tio.ScalarImage(tensor=tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack["image_meta_dict"]["affine"])
                     tio_transformed = resampling_to_fixed_tio(tmp_tio)
                     common_stack = common_stack + tio_transformed.tensor.unsqueeze(0).to(self.device)
-
+                print(f'common vol update:  {time.time() - timer} s ')
                 #update common volume from stack
                 common_volume = common_volume + common_stack
             
             normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
             common_volume = normalizer(common_volume)
 
+            timer = time.time()
             fixed_image_tensor = common_volume
             if epoch < epochs - 1:
                 fixed_image = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(fixed_image_tensor, fixed_image_meta, epoch, self.pixdims[epoch+1])
@@ -231,11 +237,7 @@ class SVR_optimizer():
                 common_volume = t.zeros_like(fixed_image_tensor)
             else:
                 self.svr_preprocessor.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,epoch)
-    
-    def bending_loss_fucntion_single_stack(target_dict_image):
-        monai_bending = monai.losses.BendingEnergyLoss()
-        return monai_bending(target_dict_image.expand(-1,3,-1,-1,-1))
-
+            print(f'fixed_volume update:  {time.time() - timer} s ')
 """
                for name, param in model.named_parameters():
                 if param.requires_grad:
