@@ -250,6 +250,7 @@ class Preprocesser():
 
         affine_transform_monai = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
 
+
         tio_common_image = self.monai_to_torchio(stacks[0])
         resample_to_common = tio.transforms.Resample(tio_common_image, image_interpolation=self.tio_mode)
 
@@ -259,8 +260,7 @@ class Preprocesser():
 
             model = custom_models.Volume_to_Volume(device=self.device)
             loss = loss_module.Loss_Volume_to_Volume("ncc", self.device)
-            optimizer = t.optim.Adam(model.parameters(), lr=0.001)
-            affine = t.eye(4)
+            optimizer = t.optim.Adam(model.parameters(), lr=0.0005)
 
             for ep in range(0, 15):
                 transformed_fixed_tensor, affine_tmp = model(common_tensor.detach(),fixed_meta,stack_meta)
@@ -465,7 +465,8 @@ class Preprocesser():
         to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         add_channel = AddChanneld(keys=["image"])
 
-        monai_dict["image"] = tio_image.tensor
+
+        monai_dict["image"] = tio_image.tensor.to(self.device)
         monai_dict["image_meta_dict"]["affine"] = tio_image.affine
         monai_dict["image_meta_dict"]["spatial_shape"] = np.array(list(tio_image.tensor.shape)[1:])
         monai_dict["image_meta_dict"]["filename_or_obj"] = filename

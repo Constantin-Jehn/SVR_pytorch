@@ -124,8 +124,8 @@ class SVR_optimizer():
         loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
         resampler = monai.transforms.ResampleToMatch(mode = self.mode)
         
-        common_volume = t.zeros_like(self.fixed_image["image"])
-        fixed_image_image = self.fixed_image["image"]
+        common_volume = t.zeros_like(self.fixed_image["image"], device=self.device)
+        fixed_image_tensor = self.fixed_image["image"]
         fixed_image_meta = self.fixed_image["image_meta_dict"]
         
         #use this template for tio-resampling operations of stacks during update
@@ -133,6 +133,8 @@ class SVR_optimizer():
         resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
 
         for epoch in range(0,epochs):
+            tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio({"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta})
+            resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
             print(f'\n\n Epoch: {epoch}')
 
             for st in range (0, self.k):
@@ -155,7 +157,7 @@ class SVR_optimizer():
                     optimizer.zero_grad()
                     #return fixed_images resamples to local stack where inverse affines were applied
                     #in shape (n_slices,1,[stack_shape]) affines 
-                    tr_fixed_images, affines_tmp = model(fixed_image_image.detach(), fixed_image_meta, local_stack["image_meta_dict"], mode = self.mode)
+                    tr_fixed_images, affines_tmp = model(fixed_image_tensor.detach(), fixed_image_meta, local_stack["image_meta_dict"], mode = self.mode)
                     
                     tr_fixed_images = tr_fixed_images.to(self.device)
                     
@@ -200,7 +202,7 @@ class SVR_optimizer():
 
                 #multiply likelihood to each voxel for outlier removal
                 
-                #local_slices = t.mul(local_slices,likelihood_images)
+                local_slices = t.mul(local_slices,likelihood_images)
 
                 affines_tmp = affines_slices[st]
                 #apply affines to transform slices
@@ -208,12 +210,12 @@ class SVR_optimizer():
                 transformed_slices = transformed_slices.detach()
                 
                 #update current stack from slices
-                common_stack = t.zeros_like(common_volume)
+                common_stack = t.zeros_like(common_volume, device=self.device)
                 for sl in range(0,n_slices[st]):
                     tmp = transformed_slices[sl,:,:,:,:]
                     tmp_tio = tio.Image(tensor=tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack["image_meta_dict"]["affine"])
                     tio_transformed = resampling_to_fixed_tio(tmp_tio)
-                    common_stack = common_stack + tio_transformed.tensor.unsqueeze(0)
+                    common_stack = common_stack + tio_transformed.tensor.unsqueeze(0).to(self.device)
 
                 #update common volume from stack
                 common_volume = common_volume + common_stack
@@ -221,14 +223,14 @@ class SVR_optimizer():
             normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
             common_volume = normalizer(common_volume)
 
-            fixed_image_image = common_volume
+            fixed_image_tensor = common_volume
             if epoch < epochs - 1:
-                fixed_image = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(fixed_image_image, fixed_image_meta, epoch, self.pixdims[epoch+1])
-                fixed_image_image = fixed_image["image"]
+                fixed_image = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(fixed_image_tensor, fixed_image_meta, epoch, self.pixdims[epoch+1])
+                fixed_image_tensor = fixed_image["image"]
                 fixed_image_meta = fixed_image["image_meta_dict"]
-                common_volume = t.zeros_like(fixed_image_image)
+                common_volume = t.zeros_like(fixed_image_tensor)
             else:
-                self.svr_preprocessor.save_intermediate_reconstruction(fixed_image_image,fixed_image_meta,epoch)
+                self.svr_preprocessor.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,epoch)
     
     def bending_loss_fucntion_single_stack(target_dict_image):
         monai_bending = monai.losses.BendingEnergyLoss()
