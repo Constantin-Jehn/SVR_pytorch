@@ -69,7 +69,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","gaussian_outlier_removal_5_4_lr0-0001_pix1")
+    result_folder = os.path.join("results","gaussian_outlier_removal_3_3_lr0-0001_pix1")
     
     try:
         os.mkdir(result_folder)
