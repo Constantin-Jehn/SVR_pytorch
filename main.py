@@ -61,15 +61,15 @@ def optimize():
                 
                 "23_3T_nody_001.nii.gz"]
     
-    
+   
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
-    
+   
     pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.2,1.2,1.2),(1.1,1.1,1.1),(1.0,1.0,1.0)]
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","gaussian_outlier_removal_3_3_lr0-0001_pix1")
+    result_folder = os.path.join("results","init_model_each_time")
     
     try:
         os.mkdir(result_folder)
@@ -79,13 +79,13 @@ def optimize():
         pass
     mode = "bicubic"
 
-    tio_mode = "gaussian"
+    tio_mode = "welch"
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
     epochs = 3
     inner_epochs = 3
-    lr = 0.0001
+    lr = 0.001
     loss_fnc = "mi"
     opt_alg = "Adam"
     

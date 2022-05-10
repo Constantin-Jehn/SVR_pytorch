@@ -35,7 +35,7 @@ class Loss_Volume_to_Slice(t.nn.Module):
     def __init__(self,loss_fnc:str,device):
         super(Loss_Volume_to_Slice,self).__init__()
         if loss_fnc == "ncc":
-            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=7)
+            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=5)
         elif loss_fnc == "mi":
             self.monai_loss = monai.losses.GlobalMutualInformationLoss(reduction = "sum")
         else:
@@ -66,6 +66,8 @@ class Loss_Volume_to_Slice(t.nn.Module):
                 pred = tr_fixed_tensor[sl,:,:,:,sl]
                 target = local_slices[sl,:,:,:,sl]
                 #print(f'pred: {str(pred.device)}, target: {str(target.device)}, loss: {str(loss.device)}')
-            loss = loss + self.monai_loss(pred.unsqueeze(0), target.unsqueeze(0))  
+            loss = loss + self.monai_loss(pred.unsqueeze(0), target.unsqueeze(0))
         return loss
+
+        
     

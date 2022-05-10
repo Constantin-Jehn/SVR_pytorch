@@ -97,7 +97,7 @@ class Volume_to_Slice(t.nn.Module):
         self.n_slices = n_slices
         self.rotations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
-        self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
+        self.affine_layer = monai.networks.layers.AffineTransform(mode = "nearest",  normalized = True, padding_mode = "zeros")
 
     def forward(self, fixed_image_tensor:t.tensor, fixed_image_meta:dict, local_stack_meta:dict, mode = "bilinear")->tuple:
         """

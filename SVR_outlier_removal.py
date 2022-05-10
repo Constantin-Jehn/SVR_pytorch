@@ -5,10 +5,15 @@ from sklearn.covariance import log_likelihood
 import torch as t
 import numpy as np
 
-class outlier_removal(t.nn.Module):
+class Outlier_Removal_Voxels(t.nn.Module):
+    """
+    Class for outlier removal of voxels, using Gaussian zero mean pdf for inliers 
+    and uniform distribution with densitiy m for outliers.
+    Parameter fitting using EM-algorithm.
+    """
     def __init__(self, e:t.tensor) -> None:
         """
-        Constructr of outlier using EM algorithm
+        Construcor of outlier using EM algorithm
 
         Args:
             e (t.tensor): Error image
@@ -20,7 +25,7 @@ class outlier_removal(t.nn.Module):
         #use zero mean of gaussian
         self.mu = 0
     
-    def gaussian(self, e:t.tensor, sigma_squared:t.tensor)->t.tensor:
+    def gaussian(self, e:t.tensor, variance:t.tensor)->t.tensor:
         """
         calculate zero mean Gaussian with current sigma_squared
 
@@ -31,12 +36,12 @@ class outlier_removal(t.nn.Module):
         Returns:
             t.tensor: output of Gaussian 
         """
-        factor = t.div(1,t.sqrt(sigma_squared * 2 * t.pi))
-        argument = t.div((e - self.mu), t.sqrt(sigma_squared))
+        factor = t.div(1,t.sqrt(variance * 2 * t.pi))
+        argument = t.div((e - self.mu), t.sqrt(variance))
         exponential = t.exp(-0.5 * t.pow((argument),2) )
         return factor * exponential
 
-    def expectation(self, e:t.tensor, sigma_squared:float, c:float)->t.tensor:
+    def expectation(self, e:t.tensor, variance:float, c:float)->t.tensor:
         """updated likelihood of being an inlier with current parameters c and sigma_squared
 
         Args:
@@ -47,7 +52,7 @@ class outlier_removal(t.nn.Module):
         Returns:
             t.tensor: probability image of being inlier
         """
-        gauss =  self.gaussian(e,sigma_squared)
+        gauss =  self.gaussian(e,variance)
         denominator = gauss * c + self.m * (1 - c)
         return t.div(gauss * c, denominator)
 
@@ -62,9 +67,9 @@ class outlier_removal(t.nn.Module):
             float: updated parameters c and sigma_squared
         """
         nominator = t.sum(t.mul(p,t.pow(e,2)),[0,1])
-        sigma_squared = t.div(nominator,t.sum(p,[0,1]))
+        variance = t.div(nominator,t.sum(p,[0,1]))
         c = t.div(t.sum(p,[0,1]), t.numel(p) )
-        return sigma_squared, c
+        return variance, c
 
     def forward(self,e:t.tensor)->t.tensor:
         """
@@ -80,11 +85,11 @@ class outlier_removal(t.nn.Module):
         likelihood_image_old = t.zeros_like(e)
         avg_delta = 1
         iterations = 0
-        sigma_squared = t.tensor(1)
+        variance = t.tensor(1)
         c = t.tensor(0.5)
-        while(avg_delta > 0.001  and iterations < 100 ):
-            p = self.expectation(e,sigma_squared, c)
-            sigma_squared, c = self.maximization(e,p)
+        while(avg_delta > 0.001  and iterations < 1000 ):
+            p = self.expectation(e,variance, c)
+            variance, c = self.maximization(e,p)
             #log_likelihood_image = t.log(p)
 
             avg_delta =  t.mean(t.abs(likelihood_image_old - p)).item()
@@ -94,7 +99,68 @@ class outlier_removal(t.nn.Module):
             #print(f'average delta: {avg_delta}')
             iterations = iterations + 1
         return p
-        
+
+class Outlier_Removal_Slices(t.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    
+    def gaussian(self, red_voxel_prob:t.tensor, variance:t.tensor, mu:t.tensor)->t.tensor:
+        """
+        calculate zero mean Gaussian with current sigma_squared
+
+        Args:
+            e (t.tensor): error image
+            sigma_squared (t.tensor): current variance
+
+        Returns:
+            t.tensor: output of Gaussian 
+        """
+        factor = t.div(1,t.sqrt(variance * 2 * t.pi))
+        argument = t.div((red_voxel_prob - mu), t.sqrt(variance))
+        exponential = t.exp(-0.5 * t.pow((argument),2) )
+        return factor * exponential
+
+    def expectation(self, red_voxel_prob:t.tensor, var_in:float, mu_in:float, var_out:float, mu_out:float, c:float)->t.tensor:
+        inlier_gauss = self.gaussian(red_voxel_prob,var_in, mu_in)
+        outlier_gauss = self.gaussian(red_voxel_prob,var_out, mu_out)
+        return c * inlier_gauss / (c*inlier_gauss + (1-c) * outlier_gauss)
+    
+    def maximization(self, red_voxel_prob:t.tensor, p_slice:t.tensor) -> tuple:
+        #for two class problem respoonsibilities simplify
+        responsibility_in = t.sum(p_slice)
+        responsibility_out = t.sum(1 - p_slice)
+
+        mu_in = t.sum(t.mul(red_voxel_prob, p_slice)) / responsibility_in
+        mu_out = t.sum(t.mul(red_voxel_prob,(1 - p_slice))) / responsibility_out
+
+        var_in = t.sum(p_slice * t.pow((red_voxel_prob - mu_in),2)) / responsibility_in
+        var_out = t.sum((1 - p_slice) * t.pow((red_voxel_prob - mu_out),2)) / responsibility_out
+
+        c = responsibility_in / (responsibility_in + responsibility_out)
+
+        return var_in, mu_in, var_out, mu_out, c
+
+    def forward(self, red_voxel_prob:t.tensor) -> t.tensor:
+        slice_likelihoods_old = t.zeros_like(red_voxel_prob)
+        avg_delta = 1
+        iterations = 0
+        var_in, var_out = t.tensor(1),t.tensor(1)
+        mu_in, mu_out = t.tensor(0),t.tensor(0)
+        c = 0.5
+
+        p_slices = red_voxel_prob
+        var_in, mu_in, var_out, mu_out, c = self.maximization(red_voxel_prob,p_slices)
+
+        while(avg_delta > 0.003  and iterations < 200 ):
+            p_slices = self.expectation(red_voxel_prob, var_in, mu_in, var_out, mu_out, c)
+            var_in, mu_in, var_out, mu_out, c = self.maximization(red_voxel_prob,p_slices)
+            avg_delta =  t.mean(t.abs(slice_likelihoods_old - p_slices)).item()
+            slice_likelihoods_old = p_slices
+            iterations = iterations + 1
+        return p_slices
+
+
+
 
 
 

@@ -13,7 +13,9 @@ import loss_module
 import time
 import matplotlib.pyplot as plt
 from SVR_Preprocessor import Preprocesser
-from SVR_outlier_removal import outlier_removal
+from SVR_outlier_removal import Outlier_Removal_Voxels, Outlier_Removal_Slices
+
+import torchviz
 
 class SVR_optimizer():
     def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, monai_mode:str, tio_mode:str)->None:
@@ -116,7 +118,7 @@ class SVR_optimizer():
             slices.append(slice_tmp)
             n_slices.append(n_slice)
             slice_dims.append(slice_dim)
-            models.append(custom_models.Volume_to_Slice(n_slices=n_slice, device=self.device))
+            #models.append(custom_models.Volume_to_Slice(n_slices=n_slice, device=self.device))
             #store affine transforms
             affines_slices.append(t.eye(4, device=self.device).unsqueeze(0).repeat(n_slice,1,1))
             
@@ -133,13 +135,14 @@ class SVR_optimizer():
         resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
 
         for epoch in range(0,epochs):
+            likelihood_image_storage = list()
             tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio({"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta})
             resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
             print(f'\n\n Epoch: {epoch}')
 
             for st in range (0, self.k):
                 print(f"\n  stack: {st}")
-                model = models[st]
+                model = custom_models.Volume_to_Slice(n_slices=n_slices[st], device=self.device)
                 model.to(self.device)
                 
                 if opt_alg == "SGD":
@@ -166,56 +169,46 @@ class SVR_optimizer():
                     loss_tensor = loss(tr_fixed_images, local_slices, n_slices[st], slice_dims[st])
                     print(f'loss: {loss_tensor.item()}')
                     loss_tensor.backward(retain_graph = False)
+
+                    torchviz.make_dot(loss_tensor, params= dict(model.named_parameters()))
+                    """
+                    for name, param in model.named_parameters():
+                        if param.requires_grad:
+                            print (f'parameter {name} has only zero values: {t.all(param.data == 0)}')
+                    """
                     
                     optimizer.step()
                 
-
-                #update procedure
-                likelihood_images = t.ones_like(local_slices, device=self.device)
-
+            #update procedure
                 timer = time.time()
                 for sl in range(0,n_slices[st]):
                     #multipy the new transform to the existing transform
                     #order second argument is the first transform
                     #this is necessary because the reference image was moved by by affines_tmp
                     affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
-
-                    #outlier removal
-                    slice_dim = slice_dims[st]
-                    if slice_dim == 0:
-                        pred = tr_fixed_images[sl,0,sl,:,:]
-                        target = local_slices[sl,0,sl,:,:]
-                    elif slice_dim == 1:
-                        pred = tr_fixed_images[sl,0,:,sl,:]
-                        target = local_slices[sl,0,:,sl,:]
-                    elif slice_dim == 2:
-                        pred = tr_fixed_images[sl,0,:,:,sl]
-                        target = local_slices[sl,0,:,:,sl]
-
-                    error_tensor = pred - target
-
-                    outlier_remover = outlier_removal(error_tensor)
-                    p = outlier_remover(error_tensor)
-
-                    if slice_dim == 0:
-                        likelihood_images[sl,0,sl,:,:] = p
-                    elif slice_dim == 1:
-                        likelihood_images[sl,0,:,sl,:] = p
-                    elif slice_dim == 2:
-                        likelihood_images[sl,0,:,:,sl] = p
+                
+                timer = time.time()
+                likelihood_images_voxels = self.outlier_removal_voxels(tr_fixed_images,local_slices, n_slices[st], slice_dims[st])
+                likelihood_images_slices = self.outlier_removal_slices(likelihood_images_voxels, n_slices[st], slice_dims[st])
                 print(f'outlier removal:  {time.time() - timer} s ')
 
                 #multiply likelihood to each voxel for outlier removal
-                local_slices = t.mul(local_slices,likelihood_images)
+                #local_slices = t.mul(local_slices, t.mul(likelihood_images_voxels, likelihood_images_slices))
+                local_slices = t.mul(local_slices, likelihood_images_voxels)
 
                 affines_tmp = affines_slices[st]
                 #apply affines to transform slices
                 transformed_slices = affine_transform_slices(local_slices, affines_tmp)
+
+                #leaves out 3d 2d registration
+                #transformed_slices = local_slices
+
                 transformed_slices = transformed_slices.detach()
                 
                 #update current stack from slices
                 timer = time.time()
                 common_stack = t.zeros_like(common_volume, device=self.device)
+
                 for sl in range(0,n_slices[st]):
                     tmp = transformed_slices[sl,:,:,:,:]
                     tmp_tio = tio.Image(tensor=tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack["image_meta_dict"]["affine"])
@@ -238,6 +231,68 @@ class SVR_optimizer():
             else:
                 self.svr_preprocessor.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,epoch)
             print(f'fixed_volume update:  {time.time() - timer} s ')
+
+
+    def outlier_removal_voxels(self, tr_fixed_images:t.tensor, local_slices:t.tensor, n_slices:int, slice_dim:int) -> t.tensor:
+        likelihood_images = t.zeros_like(local_slices, device=self.device)
+        for sl in range (0,n_slices):
+            #outlier removal
+            if slice_dim == 0:
+                pred = tr_fixed_images[sl,0,sl,:,:]
+                target = local_slices[sl,0,sl,:,:]
+            elif slice_dim == 1:
+                pred = tr_fixed_images[sl,0,:,sl,:]
+                target = local_slices[sl,0,:,sl,:]
+            elif slice_dim == 2:
+                pred = tr_fixed_images[sl,0,:,:,sl]
+                target = local_slices[sl,0,:,:,sl]
+
+            error_tensor = pred - target
+
+            outlier_remover = Outlier_Removal_Voxels(error_tensor)
+            p_voxels = outlier_remover(error_tensor)
+
+            if slice_dim == 0:
+                likelihood_images[sl,0,sl,:,:] = p_voxels
+            elif slice_dim == 1:
+                likelihood_images[sl,0,:,sl,:] = p_voxels
+            elif slice_dim == 2:
+                likelihood_images[sl,0,:,:,sl] = p_voxels
+        return likelihood_images
+
+    def outlier_removal_slices(self,likelihood_images:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
+
+        outlier_remover = Outlier_Removal_Slices()
+
+        likelihood_images_squared = t.pow(likelihood_images,t.tensor(2))
+        if slice_dim == 0:
+            voxels_per_slice = t.numel(likelihood_images_squared[0,0,0,:,:])
+            red_voxel_prob = t.sqrt( t.einsum('ijklm->k',likelihood_images_squared) / voxels_per_slice )
+        elif slice_dim == 1:
+            voxels_per_slice = t.numel(likelihood_images_squared[0,0,:,0,:])
+            red_voxel_prob = t.sqrt( t.einsum('ijklm->l',likelihood_images_squared) / voxels_per_slice )
+        elif slice_dim == 2:
+            voxels_per_slice = t.numel(likelihood_images_squared[0,0,:,:,0])
+            red_voxel_prob = t.sqrt( t.einsum('ijklm->m',likelihood_images_squared) / voxels_per_slice )
+        
+        p_slices = outlier_remover(red_voxel_prob)
+        p_slices_output = t.zeros_like(likelihood_images)
+        if slice_dim == 0:
+            for i in range(0,n_slices):
+                p_slices_output[i,0,i,:,:] = p_slices[i]
+        elif slice_dim == 1:
+            for i in range(0,n_slices):
+                p_slices_output[i,0,:,i,:] = p_slices[i]
+        elif slice_dim == 2:
+            for i in range(0,n_slices):
+                p_slices_output[i,0,:,:,i] = p_slices[i]
+        
+        return p_slices_output
+
+
+
+
+    
 """
                for name, param in model.named_parameters():
                 if param.requires_grad:
