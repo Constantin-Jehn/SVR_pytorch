@@ -69,7 +69,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","init_model_each_time")
+    result_folder = os.path.join("results","forward_tio_transform")
     
     try:
         os.mkdir(result_folder)

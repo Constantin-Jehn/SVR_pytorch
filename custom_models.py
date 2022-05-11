@@ -1,15 +1,7 @@
 import torch as t
 import monai
 from monai.transforms import (
-    AddChanneld,
-    LoadImage,
-    LoadImaged,
-    Orientationd,
-    Rand3DElasticd,
-    RandAffined,
-    Spacingd,
-    ToTensord,
-    RandAffine
+    AddChanneld
 )
 from monai.transforms.utils import (
     create_rotate,
@@ -18,6 +10,8 @@ from monai.transforms.utils import (
 from copy import deepcopy
 
 import numpy as np
+
+import torchio as tio
 
 
 class Volume_to_Volume(t.nn.Module):
@@ -97,9 +91,9 @@ class Volume_to_Slice(t.nn.Module):
         self.n_slices = n_slices
         self.rotations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
-        self.affine_layer = monai.networks.layers.AffineTransform(mode = "nearest",  normalized = True, padding_mode = "zeros")
+        self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
 
-    def forward(self, fixed_image_tensor:t.tensor, fixed_image_meta:dict, local_stack_meta:dict, mode = "bilinear")->tuple:
+    def forward(self, fixed_image_tensor:t.tensor, fixed_image_meta:dict, local_stack_tio:tio.Image, mode = "bilinear", tio_mode = "welch")->tuple:
         """
         fixed volume is transformed by current parameter (rotations, translations) (to be precise by inverse of their affine)
         the actual affines (one per slice) are returned to be applied outside this module
@@ -107,6 +101,7 @@ class Volume_to_Slice(t.nn.Module):
         Args:
             fixed_image_tensor (t.tensor): image_tensor of registration target/volume
             fixed_image_meta (dict): dictionary with meta data of fixed_image
+            local_stack_tensor(t.tensor): image_tensor of local stack
             local_stack_meta (dict): dictionary with meta data of local stack
             mode (str, optional): interpolation mode for resampling
 
@@ -114,12 +109,13 @@ class Volume_to_Slice(t.nn.Module):
         Returns:
             tuple: tensor containing the fixed images transformed by the inverse affines of each slice, affines for slices
         """
-
+        resampler_tio = tio.transforms.Resample(local_stack_tio, image_interpolation= tio_mode)
         resampler = monai.transforms.ResampleToMatch(mode = mode)
         add_channel = AddChanneld(keys=["image"])
         
         
         #resample fixed image to local stack and repeat n_slices time for batch-format
+        """
         fixed_image_tensor = fixed_image_tensor.squeeze().unsqueeze(0)
         fixed_image_tensor, fixed_image_meta = resampler(fixed_image_tensor,src_meta=fixed_image_meta,
                          dst_meta=local_stack_meta)
@@ -128,7 +124,14 @@ class Volume_to_Slice(t.nn.Module):
         fixed_image_tensor = fixed_image_tensor.unsqueeze(0)
         
         fixed_image_image_batch = fixed_image_tensor.repeat(self.n_slices,1,1,1,1)
+        """
         
+        fixed_tio = tio.Image(tensor=fixed_image_tensor.squeeze().unsqueeze(0).detach().cpu(), affine=fixed_image_meta["affine"]) 
+        fixed_tio = resampler_tio(fixed_tio)
+        fixed_image_tensor = fixed_tio.tensor.to(self.device)
+        fixed_image_image_batch = fixed_image_tensor.repeat(self.n_slices,1,1,1,1)
+
+
         #create affines and inv affines
         aff = self.create_T(self.rotations[0], self.translations[0])
         inv_aff = t.linalg.inv(aff)

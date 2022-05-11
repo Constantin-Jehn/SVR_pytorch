@@ -373,7 +373,7 @@ class Preprocesser():
         nifti_saver.save(fixed_image_tensor.squeeze(
         ).unsqueeze(0), meta_data=fixed_image_meta)
 
-    def save_intermediate_reconstruction_and_upsample(self, fixed_image_tensor:t.tensor, fixed_image_meta:dict, epoch:int, pix_dim:tuple)->dict:
+    def save_intermediate_reconstruction_and_upsample(self, fixed_image_tensor:t.tensor, fixed_image_meta:dict, epoch:int, upsample:bool = False, pix_dim:tuple = (1,1,1))->dict:
         """
         saves reconstruction of current epoch;
         upsamples fixed image to following resolution for multi resolution approach
@@ -382,6 +382,7 @@ class Preprocesser():
             fixed_image_tensor (t.tensor): tensor of fixed image
             fixed_image_meta (dict): meta dict of fixed image
             epoch (int): current epoch, is added to filename
+            upsample (bool): whether upsampling is necessary
             pix_dim (tuple): pix_dim to sample next
 
         Returns:
@@ -390,14 +391,16 @@ class Preprocesser():
         self.save_intermediate_reconstruction(fixed_image_tensor, fixed_image_meta, epoch)
         filename = fixed_image_meta["filename_or_obj"]
         filename = filename[:-7] + "_" + f"{epoch:02}" + ".nii.gz"
-        # resample using torchio
-        tio_image = tio.ScalarImage(tensor=fixed_image_tensor.squeeze().unsqueeze(0).cpu(), affine=fixed_image_meta["affine"])
-        resampler = tio.transforms.Resample(pix_dim, image_interpolation=self.tio_mode)
-        tio_resampled = resampler(tio_image)
-
         #keep filename proper
         filename = filename[:-10] + ".nii.gz"
-        monai_resampled = self.update_monai_from_tio(tio_resampled,{"image":fixed_image_tensor, "image_meta_dict": fixed_image_meta}, filename)
+        tio_image = tio.ScalarImage(tensor=fixed_image_tensor.squeeze().unsqueeze(0).cpu(), affine=fixed_image_meta["affine"])
+        if upsample:
+            # resample using torchio
+            resampler = tio.transforms.Resample(pix_dim, image_interpolation=self.tio_mode)
+            tio_resampled = resampler(tio_image)
+            monai_resampled = self.update_monai_from_tio(tio_resampled,{"image":fixed_image_tensor, "image_meta_dict": fixed_image_meta}, filename)
+        else:
+            monai_resampled = self.update_monai_from_tio(tio_image,{"image":fixed_image_tensor, "image_meta_dict": fixed_image_meta}, filename)
 
         return monai_resampled
 

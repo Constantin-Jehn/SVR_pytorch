@@ -154,6 +154,8 @@ class SVR_optimizer():
                 
                 local_stack = self.stacks[st]
                 local_slices = slices[st]
+
+                local_stack_tio = self.svr_preprocessor.monai_to_torchio(local_stack)
                 
                 #optimization procedure
                 for inner_epoch in range(0,inner_epochs):
@@ -161,7 +163,7 @@ class SVR_optimizer():
                     optimizer.zero_grad()
                     #return fixed_images resamples to local stack where inverse affines were applied
                     #in shape (n_slices,1,[stack_shape]) affines 
-                    tr_fixed_images, affines_tmp = model(fixed_image_tensor.detach(), fixed_image_meta, local_stack["image_meta_dict"], mode = self.mode)
+                    tr_fixed_images, affines_tmp = model(fixed_image_tensor.detach(), fixed_image_meta, local_stack_tio, mode = self.mode, tio_mode = self.tio_mode)
                     
                     tr_fixed_images = tr_fixed_images.to(self.device)
                     
@@ -224,7 +226,8 @@ class SVR_optimizer():
             timer = time.time()
             fixed_image_tensor = common_volume
             if epoch < epochs - 1:
-                fixed_image = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(fixed_image_tensor, fixed_image_meta, epoch, self.pixdims[epoch+1])
+                upsample_bool = (self.pixdims[epoch + 1] == self.pixdims[epoch])
+                fixed_image = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(fixed_image_tensor, fixed_image_meta, epoch, upsample=upsample_bool, pix_dim = self.pixdims[epoch+1])
                 fixed_image_tensor = fixed_image["image"]
                 fixed_image_meta = fixed_image["image_meta_dict"]
                 common_volume = t.zeros_like(fixed_image_tensor)
