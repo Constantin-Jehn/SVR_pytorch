@@ -1,7 +1,8 @@
 import torchio as tio
 import monai
 from monai.transforms import (
-    AddChanneld
+    AddChanneld,
+    Affine
 )
 import torchvision as tv
 import os
@@ -14,8 +15,10 @@ import time
 import matplotlib.pyplot as plt
 from SVR_Preprocessor import Preprocesser
 from SVR_outlier_removal import Outlier_Removal_Voxels, Outlier_Removal_Slices
+from torch.utils.tensorboard import SummaryWriter
 
 import torchviz
+import SimpleITK as sitk
 
 class SVR_optimizer():
     def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, monai_mode:str, tio_mode:str)->None:
@@ -49,6 +52,8 @@ class SVR_optimizer():
         self.ground_truth = self.stacks
 
         self.tio_mode = tio_mode
+
+        self.writer = SummaryWriter("runs/test_session")
           
 
     def construct_slices_from_stack(self, stack:dict):
@@ -142,8 +147,10 @@ class SVR_optimizer():
 
             for st in range (0, self.k):
                 print(f"\n  stack: {st}")
-                model = custom_models.Volume_to_Slice(n_slices=n_slices[st], device=self.device)
+                model = custom_models.Volume_to_Slice(n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode)
                 model.to(self.device)
+
+                
                 
                 if opt_alg == "SGD":
                     optimizer = t.optim.SGD(model.parameters(), lr = lr)
@@ -163,8 +170,14 @@ class SVR_optimizer():
                     optimizer.zero_grad()
                     #return fixed_images resamples to local stack where inverse affines were applied
                     #in shape (n_slices,1,[stack_shape]) affines 
-                    tr_fixed_images, affines_tmp = model(fixed_image_tensor.detach(), fixed_image_meta, local_stack_tio, mode = self.mode, tio_mode = self.tio_mode)
                     
+                    tr_fixed_images, affines_tmp = model(fixed_image_tensor.detach(), fixed_image_meta["affine"], local_stack_tio.tensor, local_stack_tio.affine)
+
+                    if epoch == 0 and st == 0:
+                        model_tensor_board = custom_models.Volume_to_Slice(n_slices=2, device=self.device, mode = self.mode, tio_mode = self.tio_mode)
+                        red_input = fixed_image_tensor[:,:,0:2,:,:].detach()
+                        self.writer.add_graph(model_tensor_board,(red_input, t.tensor(fixed_image_meta["affine"]), local_stack_tio.tensor, t.tensor(local_stack_tio.affine)))
+                        self.writer.close
                     tr_fixed_images = tr_fixed_images.to(self.device)
                     
                     #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
@@ -172,7 +185,8 @@ class SVR_optimizer():
                     print(f'loss: {loss_tensor.item()}')
                     loss_tensor.backward(retain_graph = False)
 
-                    torchviz.make_dot(loss_tensor, params= dict(model.named_parameters()))
+                    self.writer.add_scalar(f"Loss_stack_{st}_ep_{epoch}", loss_tensor.item(), inner_epoch)
+                    #torchviz.make_dot(loss_tensor, params= dict(model.named_parameters()))
                     """
                     for name, param in model.named_parameters():
                         if param.requires_grad:
@@ -181,6 +195,7 @@ class SVR_optimizer():
                     
                     optimizer.step()
                 
+                self.writer.close()
             #update procedure
                 timer = time.time()
                 for sl in range(0,n_slices[st]):
@@ -194,13 +209,24 @@ class SVR_optimizer():
                 likelihood_images_slices = self.outlier_removal_slices(likelihood_images_voxels, n_slices[st], slice_dims[st])
                 print(f'outlier removal:  {time.time() - timer} s ')
 
+                timer = time.time()
                 #multiply likelihood to each voxel for outlier removal
                 #local_slices = t.mul(local_slices, t.mul(likelihood_images_voxels, likelihood_images_slices))
                 local_slices = t.mul(local_slices, likelihood_images_voxels)
 
                 affines_tmp = affines_slices[st]
                 #apply affines to transform slices
+                #the layer can only use "bilinear"
                 transformed_slices = affine_transform_slices(local_slices, affines_tmp)
+
+                """
+                #try Affine transform - should be able to use "bicubic"
+                transformed_slices = t.zeros_like(local_slices)
+                
+                for sl in range(0,n_slices[st]):
+                    tio_image = tio.Image(tensor = transformed_slices[sl,:,:,:,:].detach().cpu(), affine = local_stack_tio.affine)
+                    transformed_slices[sl,:,:,:,:] = self.sitk_affine_transform(tio_image,affines_tmp[sl])
+                """
 
                 #leaves out 3d 2d registration
                 #transformed_slices = local_slices
@@ -208,7 +234,7 @@ class SVR_optimizer():
                 transformed_slices = transformed_slices.detach()
                 
                 #update current stack from slices
-                timer = time.time()
+                
                 common_stack = t.zeros_like(common_volume, device=self.device)
 
                 for sl in range(0,n_slices[st]):
@@ -291,6 +317,24 @@ class SVR_optimizer():
                 p_slices_output[i,0,:,:,i] = p_slices[i]
         
         return p_slices_output
+
+    def sitk_affine_transform(self, tio_image:tio.Image, affine_matr:t.tensor)->t.tensor:
+        sitk_image = tio_image.as_sitk()
+
+        rotation = affine_matr[:3,:3].ravel().tolist()
+        translation = affine_matr[:3,3].tolist()
+        affine = sitk.AffineTransform(rotation,translation)
+
+        reference_image = sitk_image
+        interpolator = sitk.sitkWelchWindowedSinc
+        default_value = 0
+
+        resampled =  sitk.Resample(sitk_image,reference_image,affine,interpolator,default_value)
+
+        tensor = t.permute(t.tensor(sitk.GetArrayFromImage(resampled)),(2,1,0))
+
+        tensor = tensor.unsqueeze(0)
+        return tensor
 
 
 

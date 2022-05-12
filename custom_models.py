@@ -84,7 +84,7 @@ class Volume_to_Slice(t.nn.Module):
     class to perform 3d-2d registration, aligns the fixed image to a slice by "inv_affines",
     affine can be used later to resample the slice to the fixed image
     """
-    def __init__(self, n_slices:int, device):
+    def __init__(self, n_slices:int, device, mode = "bilinear", tio_mode = "welch"):
         super().__init__()
         
         self.device = device
@@ -92,8 +92,10 @@ class Volume_to_Slice(t.nn.Module):
         self.rotations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
+        self.mode = mode
+        self.tio_mode = tio_mode
 
-    def forward(self, fixed_image_tensor:t.tensor, fixed_image_meta:dict, local_stack_tio:tio.Image, mode = "bilinear", tio_mode = "welch")->tuple:
+    def forward(self, fixed_image_tensor:t.tensor, fixed_image_affine:t.tensor, local_stack_tensor:t.tensor, local_stack_affine:t.tensor)->tuple:
         """
         fixed volume is transformed by current parameter (rotations, translations) (to be precise by inverse of their affine)
         the actual affines (one per slice) are returned to be applied outside this module
@@ -109,8 +111,9 @@ class Volume_to_Slice(t.nn.Module):
         Returns:
             tuple: tensor containing the fixed images transformed by the inverse affines of each slice, affines for slices
         """
-        resampler_tio = tio.transforms.Resample(local_stack_tio, image_interpolation= tio_mode)
-        resampler = monai.transforms.ResampleToMatch(mode = mode)
+        local_stack_tio = tio.Image(tensor=local_stack_tensor, affine = local_stack_affine)
+        resampler_tio = tio.transforms.Resample(local_stack_tio, image_interpolation= self.tio_mode)
+        resampler = monai.transforms.ResampleToMatch(mode = self.mode)
         add_channel = AddChanneld(keys=["image"])
         
         
@@ -126,7 +129,7 @@ class Volume_to_Slice(t.nn.Module):
         fixed_image_image_batch = fixed_image_tensor.repeat(self.n_slices,1,1,1,1)
         """
         
-        fixed_tio = tio.Image(tensor=fixed_image_tensor.squeeze().unsqueeze(0).detach().cpu(), affine=fixed_image_meta["affine"]) 
+        fixed_tio = tio.Image(tensor=fixed_image_tensor.squeeze().unsqueeze(0).detach().cpu(), affine=fixed_image_affine) 
         fixed_tio = resampler_tio(fixed_tio)
         fixed_image_tensor = fixed_tio.tensor.to(self.device)
         fixed_image_image_batch = fixed_image_tensor.repeat(self.n_slices,1,1,1,1)

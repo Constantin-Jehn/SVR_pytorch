@@ -12,7 +12,8 @@ results_multi_res/
 results_single_res/
 Computational_Graphs/
 tests/
-
+runs/
+preprocessing_gaussian/
 
 .DS_Store 
 # C extensions

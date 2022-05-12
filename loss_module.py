@@ -69,5 +69,7 @@ class Loss_Volume_to_Slice(t.nn.Module):
             loss = loss + self.monai_loss(pred.unsqueeze(0), target.unsqueeze(0))
         return loss
 
+
+
         
     

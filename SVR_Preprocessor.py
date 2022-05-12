@@ -16,6 +16,7 @@ import loss_module
 import time
 import SimpleITK as sitk
 import torchvision as tv
+from torch.utils.tensorboard import SummaryWriter
 
 class Preprocesser():
     def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, device:str, monai_mode:str, tio_mode:str)->None:
@@ -41,6 +42,7 @@ class Preprocesser():
         self.mask_filename = mask_filename
         self.mode = monai_mode
         self.tio_mode = tio_mode
+        self.writer = SummaryWriter("runs/test_session")
 
     def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, save_intermediates:bool=False)->tuple:
         """        
@@ -260,6 +262,8 @@ class Preprocesser():
                 transformed_fixed_tensor = transformed_fixed_tensor.to(self.device)
                 loss_tensor = loss(transformed_fixed_tensor,stack_tensor)
                 loss_tensor.backward()
+
+                self.writer.add_scalar(f"preregistrations_{st}", loss_tensor.item(), ep)
 
                 if ep < 14:
                     optimizer.step()

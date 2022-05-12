@@ -28,8 +28,9 @@ def preprocess():
     src_folder = "sample_data"
     result_folder = os.path.join("results","preprocessing_gaussian")
     mode = "bicubic"
+    tio_mode = "welch"
     
-    svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, filenames, file_mask, device, mode)
+    svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, filenames, file_mask, device, mode, tio_mode)
     fixed_images, stacks = svr_preprocessor.preprocess_stacks_and_common_vol(init_pix_dim = pixdims[0], save_intermediates=True)
     svr_preprocessor.save_stacks(stacks,'out')
     
@@ -69,7 +70,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","forward_tio_transform")
+    result_folder = os.path.join("results","slice_transform_bicubic")
     
     try:
         os.mkdir(result_folder)
@@ -85,7 +86,7 @@ def optimize():
     
     epochs = 3
     inner_epochs = 3
-    lr = 0.001
+    lr = 0.005
     loss_fnc = "mi"
     opt_alg = "Adam"
     
