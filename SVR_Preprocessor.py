@@ -1,3 +1,5 @@
+from fileinput import filename
+from isort import file
 import torchio as tio
 import monai
 
@@ -66,6 +68,11 @@ class Preprocesser():
 
         if save_intermediates:
             stacks = self.save_stacks(stacks, 'den')
+
+        stacks = self.bias_correction_sitk(stacks)
+
+        if save_intermediates:
+            stacks = self.save_stacks(stacks, 'bias')
 
         stacks = self.normalize(stacks)
         #stacks = self.histogram_normalize_stacks(stacks)
@@ -216,14 +223,20 @@ class Preprocesser():
         Args:
             stacks (list): stacks to be bias corrected
         """
+
         corrector = sitk.N4BiasFieldCorrectionImageFilter()
         for st in range(0, self.k):
-            path = os.path.join(
-                stacks[st]["image_meta_dict"]["filename_or_obj"])
+            path = os.path.join(self.prep_folder,stacks[st]["image_meta_dict"]["filename_or_obj"])
+            tio_image = self.monai_to_torchio(stacks[st])
+            tio_image.save(path)
             image = sitk.ReadImage(path, sitk.sitkFloat32)
             denoised_image = corrector.Execute(image)
-            path = os.path.join(self.prep_folder, self.stack_filenames[st])
             sitk.WriteImage(denoised_image, path)
+        
+        stacks = self.load_stacks(to_device=True)
+
+        return stacks
+
 
     def create_common_volume_registration(self, stacks:list)->tuple:
         """
