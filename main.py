@@ -31,7 +31,7 @@ def preprocess():
     tio_mode = "welch"
     
     svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, filenames, file_mask, device, mode, tio_mode)
-    fixed_images, stacks = svr_preprocessor.preprocess_stacks_and_common_vol(init_pix_dim = pixdims[0], save_intermediates=True)
+    fixed_images, stacks, slice_dimensions = svr_preprocessor.preprocess_stacks_and_common_vol(init_pix_dim = pixdims[0], save_intermediates=True)
     svr_preprocessor.save_stacks(stacks,'out')
     
     fixed_images["image"] = t.squeeze(fixed_images["image"]).unsqueeze(0)
@@ -84,7 +84,7 @@ def optimize():
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
-    epochs = 8
+    epochs = 2
     inner_epochs = 2
     lr = 0.002
     loss_fnc = "mi"
@@ -93,5 +93,5 @@ def optimize():
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, loss_fnc=loss_fnc, opt_alg=opt_alg)
     
 if __name__ == '__main__':
-    #optimize()
-    preprocess()
+    optimize()
+    #preprocess()

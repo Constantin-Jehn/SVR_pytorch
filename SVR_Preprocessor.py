@@ -60,7 +60,7 @@ class Preprocesser():
         """
 
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        self.crop_images(upsampling=False)
+        slice_dimensions = self.crop_images(upsampling=False)
         # load cropped stacks
         stacks = self.load_stacks(to_device=True)
         # denoise stacks
@@ -89,7 +89,7 @@ class Preprocesser():
         for st in range(0, len(stacks)):
             stacks[st]["image"] = stacks[st]["image"].squeeze().unsqueeze(0)
 
-        return fixed_image, stacks
+        return fixed_image, stacks, slice_dimensions
 
     def get_cropped_stacks(self)->list:
         """
@@ -110,17 +110,24 @@ class Preprocesser():
         Args:
             upsampling (bool, optional): whether or not to upsample fixed image Defaults to False.
             pixdim (int, optional): pix dim to upsample to. Defaults to 0.
+        Returns:
+            slice_dimensions (list): For each stack the index of the dimension in which to slice
         """
         path_mask = os.path.join(self.src_folder, self.mask_filename)
         mask = tio.LabelMap(path_mask)
         path_dst = os.path.join(self.prep_folder, self.mask_filename)
         mask.save(path_dst)
 
+        slice_dimensions = list()
+
         for i in range(0, self.k):
             #resample mask to each stack
             filename = self.stack_filenames[i]
             path_stack = os.path.join(self.src_folder, filename)
             stack = tio.ScalarImage(path_stack)
+
+            slice_dimensions.append(list(stack.tensor.shape[1:]).index(min(list(stack.tensor.shape[1:]))))
+
             resampler = tio.transforms.Resample(stack)
             resampled_mask = resampler(deepcopy(mask))
             subject = tio.Subject(stack=stack, mask=resampled_mask)
@@ -151,6 +158,7 @@ class Preprocesser():
             path_dst = os.path.join(self.prep_folder, filename)
             cropped_stack.stack.save(path_dst)
 
+        return slice_dimensions
     def load_stacks(self, to_device=False)->list:
         """
         After cropping the initial images in low resolution are saved in their original coordinates

@@ -46,7 +46,7 @@ class SVR_optimizer():
         
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
-        self.fixed_image, self.stacks = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0])
+        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0])
         
         self.ground_truth = self.stacks
 
@@ -54,10 +54,10 @@ class SVR_optimizer():
 
         self.writer = SummaryWriter("runs/eight_epochs")
 
-        tio.Affine()
+
           
 
-    def construct_slices_from_stack(self, stack:dict):
+    def construct_slices_from_stack(self, stack:dict, slice_dim):
         """Constructs slices from a single stack
 
         Args:
@@ -72,7 +72,7 @@ class SVR_optimizer():
         stack = add_channel(stack)
         stack_image = stack["image"]
 
-        slice_dim, n_slices = list(stack_image.shape[2:]).index(min(list(stack_image.shape[2:]))),  min(list(stack_image.shape[2:]))
+        n_slices =  min(list(stack_image.shape[2:]))
         
         slices = t.zeros_like(stack_image).repeat(n_slices,1,1,1,1)
         
@@ -94,7 +94,7 @@ class SVR_optimizer():
                 tmp[:,:,:,:,:i] = 0
                 tmp[:,:,:,:,i+1:] = 0
                 slices[i,:,:,:,:] = tmp
-        return slices, n_slices, slice_dim
+        return slices, n_slices
 
 
 
@@ -113,17 +113,16 @@ class SVR_optimizer():
         models = list()
         slices = list()
         n_slices = list()
-        slice_dims = list()
+        slice_dims = self.slice_dimensions
         affines_slices = list()
         
         #Afffine transformations for updating common volume from slices (use bilinear because it's 2d transform)
         affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
         
         for st in range(0,self.k):
-            slice_tmp, n_slice, slice_dim = self.construct_slices_from_stack(self.stacks[st])
+            slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
             slices.append(slice_tmp)
             n_slices.append(n_slice)
-            slice_dims.append(slice_dim)
             #models.append(custom_models.Volume_to_Slice(n_slices=n_slice, device=self.device))
             #store affine transforms
             affines_slices.append(t.eye(4, device=self.device).unsqueeze(0).repeat(n_slice,1,1))
