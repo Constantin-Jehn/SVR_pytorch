@@ -65,12 +65,12 @@ def optimize():
    
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
-    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.2,1.2,1.2),(1.1,1.1,1.1),(1.0,1.0,1.0)]
+    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","slice_transform_bicubic")
+    result_folder = os.path.join("results","Epochs_8")
     
     try:
         os.mkdir(result_folder)
@@ -84,14 +84,14 @@ def optimize():
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
-    epochs = 3
-    inner_epochs = 3
-    lr = 0.005
+    epochs = 8
+    inner_epochs = 2
+    lr = 0.002
     loss_fnc = "mi"
     opt_alg = "Adam"
     
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, loss_fnc=loss_fnc, opt_alg=opt_alg)
     
 if __name__ == '__main__':
-    optimize()
-    #preprocess()
+    #optimize()
+    preprocess()

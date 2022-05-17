@@ -17,7 +17,6 @@ from SVR_Preprocessor import Preprocesser
 from SVR_outlier_removal import Outlier_Removal_Voxels, Outlier_Removal_Slices
 from torch.utils.tensorboard import SummaryWriter
 
-import torchviz
 import SimpleITK as sitk
 
 class SVR_optimizer():
@@ -53,7 +52,9 @@ class SVR_optimizer():
 
         self.tio_mode = tio_mode
 
-        self.writer = SummaryWriter("runs/test_session")
+        self.writer = SummaryWriter("runs/eight_epochs")
+
+        tio.Affine()
           
 
     def construct_slices_from_stack(self, stack:dict):
@@ -172,12 +173,13 @@ class SVR_optimizer():
                     #in shape (n_slices,1,[stack_shape]) affines 
                     
                     tr_fixed_images, affines_tmp = model(fixed_image_tensor.detach(), fixed_image_meta["affine"], local_stack_tio.tensor, local_stack_tio.affine)
-
+                    """
                     if epoch == 0 and st == 0:
                         model_tensor_board = custom_models.Volume_to_Slice(n_slices=2, device=self.device, mode = self.mode, tio_mode = self.tio_mode)
                         red_input = fixed_image_tensor[:,:,0:2,:,:].detach()
                         self.writer.add_graph(model_tensor_board,(red_input, t.tensor(fixed_image_meta["affine"]), local_stack_tio.tensor, t.tensor(local_stack_tio.affine)))
                         self.writer.close
+                    """
                     tr_fixed_images = tr_fixed_images.to(self.device)
                     
                     #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
@@ -185,7 +187,8 @@ class SVR_optimizer():
                     print(f'loss: {loss_tensor.item()}')
                     loss_tensor.backward(retain_graph = False)
 
-                    self.writer.add_scalar(f"Loss_stack_{st}_ep_{epoch}", loss_tensor.item(), inner_epoch)
+                    if inner_epoch == 0:
+                        self.writer.add_scalar(f"Loss_stack_{st}", loss_tensor.item(), epoch)
                     #torchviz.make_dot(loss_tensor, params= dict(model.named_parameters()))
                     """
                     for name, param in model.named_parameters():
@@ -217,6 +220,12 @@ class SVR_optimizer():
                 affines_tmp = affines_slices[st]
                 #apply affines to transform slices
                 #the layer can only use "bilinear"
+
+                #comment out for benchmark
+                # use identitiy for benchmark
+                #affines_tmp = t.eye(4).repeat(n_slices[st],1,1)
+
+
                 transformed_slices = affine_transform_slices(local_slices, affines_tmp)
 
                 """

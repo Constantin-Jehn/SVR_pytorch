@@ -16,7 +16,7 @@ import loss_module
 import time
 import SimpleITK as sitk
 import torchvision as tv
-from torch.utils.tensorboard import SummaryWriter
+#from torch.utils.tensorboard import SummaryWriter
 
 class Preprocesser():
     def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, device:str, monai_mode:str, tio_mode:str)->None:
@@ -42,7 +42,7 @@ class Preprocesser():
         self.mask_filename = mask_filename
         self.mode = monai_mode
         self.tio_mode = tio_mode
-        self.writer = SummaryWriter("runs/test_session")
+        #self.writer = SummaryWriter("runs/test_session")
 
     def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, save_intermediates:bool=False)->tuple:
         """        
@@ -68,6 +68,7 @@ class Preprocesser():
             stacks = self.save_stacks(stacks, 'den')
 
         stacks = self.normalize(stacks)
+        #stacks = self.histogram_normalize_stacks(stacks)
         if save_intermediates:
             stacks = self.save_stacks(stacks, 'norm')
 
@@ -263,13 +264,14 @@ class Preprocesser():
                 loss_tensor = loss(transformed_fixed_tensor,stack_tensor)
                 loss_tensor.backward()
 
-                self.writer.add_scalar(f"preregistrations_{st}", loss_tensor.item(), ep)
+                #self.writer.add_scalar(f"preregistrations_{st}", loss_tensor.item(), ep)
 
                 if ep < 14:
                     optimizer.step()
 
             transformed_fixed_tensor = transformed_fixed_tensor.detach()
 
+            #comment out for control
             stacks[st]["image"] = affine_transform_monai(stack_tensor, affine_tmp)
 
             tio_stack = self.monai_to_torchio(stacks[st])
@@ -286,7 +288,7 @@ class Preprocesser():
 
         return {"image": common_tensor.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta}, stacks
 
-    def histogram_normalize(self, fixed_image:dict, stacks:list)->tuple:
+    def histogram_normalize_stacks(self, stacks:list)->tuple:
         """        
         Applies histogram normalization to common volume and alls stacks
         Parameters
@@ -300,10 +302,10 @@ class Preprocesser():
         """
         normalizer = monai.transforms.HistogramNormalize(
             max=2047, num_bins=2048)
-        fixed_image["image"] = normalizer(fixed_image["image"])
+        #fixed_image["image"] = normalizer(fixed_image["image"])
         for st in range(0, self.k):
             stacks[st]["image"] = normalizer(stacks[st]["image"])
-        return fixed_image, stacks
+        return stacks
 
     def histogram_normalize(self, fixed_image_tensor:t.tensor)->t.tensor:
         """ 
