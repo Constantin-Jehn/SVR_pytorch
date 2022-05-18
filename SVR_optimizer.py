@@ -52,7 +52,7 @@ class SVR_optimizer():
 
         self.tio_mode = tio_mode
 
-        self.writer = SummaryWriter("runs/eight_epochs")
+        self.writer = SummaryWriter("runs/eight_epochs_ncc")
 
 
           

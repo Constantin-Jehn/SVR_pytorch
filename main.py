@@ -70,7 +70,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","Epochs_8")
+    result_folder = os.path.join("results","Epochs_8_ncc")
     
     try:
         os.mkdir(result_folder)
@@ -84,10 +84,10 @@ def optimize():
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
-    epochs = 2
+    epochs = 8
     inner_epochs = 2
     lr = 0.002
-    loss_fnc = "mi"
+    loss_fnc = "ncc"
     opt_alg = "Adam"
     
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, loss_fnc=loss_fnc, opt_alg=opt_alg)
