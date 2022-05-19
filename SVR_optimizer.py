@@ -54,7 +54,7 @@ class SVR_optimizer():
 
         self.gaussian_smoother = monai.transforms.GaussianSmooth(sigma = 0.5)
 
-        self.golay_smoother = monai.transforms.SavitzkyGolaySmooth(9,4, axis=3, mode='zeros')
+        self.golay_smoother = monai.transforms.SavitzkyGolaySmooth(7,3, axis=3, mode='zeros')
 
         self.writer = SummaryWriter("runs/eight_epochs_mi_gaussian")
 

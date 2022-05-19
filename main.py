@@ -70,7 +70,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","Ep_8_ncc_golay_update_9-4_dim_3")
+    result_folder = os.path.join("results","Ep_8_ncc_golay_update_7-3_dim_3")
     
     try:
         os.mkdir(result_folder)
