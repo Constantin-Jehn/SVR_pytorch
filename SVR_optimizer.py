@@ -52,7 +52,11 @@ class SVR_optimizer():
 
         self.tio_mode = tio_mode
 
-        self.writer = SummaryWriter("runs/eight_epochs_ncc")
+        self.gaussian_smoother = monai.transforms.GaussianSmooth(sigma = 0.5)
+
+        self.golay_smoother = monai.transforms.SavitzkyGolaySmooth(9,4, axis=3, mode='zeros')
+
+        self.writer = SummaryWriter("runs/eight_epochs_mi_gaussian")
 
 
           
@@ -198,7 +202,7 @@ class SVR_optimizer():
                     optimizer.step()
                 
                 self.writer.close()
-            #update procedure
+                #update procedure
                 timer = time.time()
                 for sl in range(0,n_slices[st]):
                     #multipy the new transform to the existing transform
@@ -224,7 +228,6 @@ class SVR_optimizer():
                 # use identitiy for benchmark
                 #affines_tmp = t.eye(4).repeat(n_slices[st],1,1)
 
-
                 transformed_slices = affine_transform_slices(local_slices, affines_tmp)
 
                 """
@@ -238,7 +241,6 @@ class SVR_optimizer():
 
                 #leaves out 3d 2d registration
                 #transformed_slices = local_slices
-
                 transformed_slices = transformed_slices.detach()
                 
                 #update current stack from slices
@@ -249,7 +251,13 @@ class SVR_optimizer():
                     tmp = transformed_slices[sl,:,:,:,:]
                     tmp_tio = tio.Image(tensor=tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack["image_meta_dict"]["affine"])
                     tio_transformed = resampling_to_fixed_tio(tmp_tio)
-                    common_stack = common_stack + tio_transformed.tensor.unsqueeze(0).to(self.device)
+
+                    #Gaussian kernel over each slice
+                    #tio_transformed_blurred = self.gaussian_smoother(tio_transformed.tensor)
+                    tio_transformed_blurred = self.golay_smoother(tio_transformed.tensor)
+
+                    common_stack = common_stack + tio_transformed_blurred.unsqueeze(0).to(self.device)
+                    #common_stack = common_stack + tio_transformed.tensor.unsqueeze(0).to(self.device)
                 print(f'common vol update:  {time.time() - timer} s ')
                 #update common volume from stack
                 common_volume = common_volume + common_stack

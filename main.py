@@ -26,7 +26,7 @@ def preprocess():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","preprocessing_gaussian")
+    result_folder = os.path.join("results","preprocessing_gaussian_0_5")
     mode = "bicubic"
     tio_mode = "welch"
     
@@ -70,7 +70,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","Epochs_8_ncc")
+    result_folder = os.path.join("results","Ep_8_ncc_golay_update_9-4_dim_3")
     
     try:
         os.mkdir(result_folder)
