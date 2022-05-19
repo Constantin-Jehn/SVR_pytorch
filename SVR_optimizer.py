@@ -14,7 +14,7 @@ import loss_module
 import time
 import matplotlib.pyplot as plt
 from SVR_Preprocessor import Preprocesser
-from SVR_outlier_removal import Outlier_Removal_Voxels, Outlier_Removal_Slices
+from SVR_outlier_removal import Outlier_Removal_Slices_cste, Outlier_Removal_Voxels, Outlier_Removal_Slices
 from torch.utils.tensorboard import SummaryWriter
 
 import SimpleITK as sitk
@@ -56,7 +56,7 @@ class SVR_optimizer():
 
         self.golay_smoother = monai.transforms.SavitzkyGolaySmooth(7,3, axis=3, mode='zeros')
 
-        self.writer = SummaryWriter("runs/eight_epochs_mi_gaussian")
+        self.writer = SummaryWriter("runs/eight_epochs_ncc_golay_slice")
 
 
           
@@ -211,14 +211,16 @@ class SVR_optimizer():
                     affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
                 
                 timer = time.time()
-                likelihood_images_voxels = self.outlier_removal_voxels(tr_fixed_images,local_slices, n_slices[st], slice_dims[st])
+                error_tensor = self.get_error_tensor(tr_fixed_images, local_slices, n_slices[st], slice_dims[st])
+
+                likelihood_images_voxels = self.outlier_removal_voxels(error_tensor, n_slices[st], slice_dims[st])
                 likelihood_images_slices = self.outlier_removal_slices(likelihood_images_voxels, n_slices[st], slice_dims[st])
                 print(f'outlier removal:  {time.time() - timer} s ')
 
                 timer = time.time()
                 #multiply likelihood to each voxel for outlier removal
-                #local_slices = t.mul(local_slices, t.mul(likelihood_images_voxels, likelihood_images_slices))
-                local_slices = t.mul(local_slices, likelihood_images_voxels)
+                local_slices = t.mul(local_slices, t.mul(likelihood_images_voxels, likelihood_images_slices))
+                #local_slices = t.mul(local_slices, likelihood_images_voxels)
 
                 affines_tmp = affines_slices[st]
                 #apply affines to transform slices
@@ -229,15 +231,6 @@ class SVR_optimizer():
                 #affines_tmp = t.eye(4).repeat(n_slices[st],1,1)
 
                 transformed_slices = affine_transform_slices(local_slices, affines_tmp)
-
-                """
-                #try Affine transform - should be able to use "bicubic"
-                transformed_slices = t.zeros_like(local_slices)
-                
-                for sl in range(0,n_slices[st]):
-                    tio_image = tio.Image(tensor = transformed_slices[sl,:,:,:,:].detach().cpu(), affine = local_stack_tio.affine)
-                    transformed_slices[sl,:,:,:,:] = self.sitk_affine_transform(tio_image,affines_tmp[sl])
-                """
 
                 #leaves out 3d 2d registration
                 #transformed_slices = local_slices
@@ -254,6 +247,8 @@ class SVR_optimizer():
 
                     #Gaussian kernel over each slice
                     #tio_transformed_blurred = self.gaussian_smoother(tio_transformed.tensor)
+                    
+                    #Use golay filter as PSF
                     tio_transformed_blurred = self.golay_smoother(tio_transformed.tensor)
 
                     common_stack = common_stack + tio_transformed_blurred.unsqueeze(0).to(self.device)
@@ -277,37 +272,65 @@ class SVR_optimizer():
                 self.svr_preprocessor.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,epoch)
             print(f'fixed_volume update:  {time.time() - timer} s ')
 
+    def get_error_tensor(self,tr_fixed_images:t.tensor, local_slices:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
+        """_summary_
 
-    def outlier_removal_voxels(self, tr_fixed_images:t.tensor, local_slices:t.tensor, n_slices:int, slice_dim:int) -> t.tensor:
-        likelihood_images = t.zeros_like(local_slices, device=self.device)
+        Args:
+            tr_fixed_images (t.tensor): updated and transformed fixed image
+            local_slices (t.tensor): initial slices of current stack
+            n_slices (int): number of slices
+            slice_dim (int): dimension along which slices are taken
+
+        Returns:
+            t.tensor: error_tensor
+        """
+        error_tensor = t.zeros_like(tr_fixed_images)
         for sl in range (0,n_slices):
             #outlier removal
             if slice_dim == 0:
                 pred = tr_fixed_images[sl,0,sl,:,:]
                 target = local_slices[sl,0,sl,:,:]
+                error_tensor[sl,0,sl,:,:] = pred - target
             elif slice_dim == 1:
                 pred = tr_fixed_images[sl,0,:,sl,:]
                 target = local_slices[sl,0,:,sl,:]
+                error_tensor[sl,0,:,sl,:] = pred - target
             elif slice_dim == 2:
                 pred = tr_fixed_images[sl,0,:,:,sl]
                 target = local_slices[sl,0,:,:,sl]
+                error_tensor[sl,0,:,:,sl] = pred - target
 
-            error_tensor = pred - target
+        return error_tensor
 
+    def outlier_removal_voxels(self, error_tensor:t.tensor,  n_slices:int, slice_dim:int) -> t.tensor:
+        """_summary_
+
+        Args:
+            error_tensor (t.tensor): Error tensor between transformed fixed image and local slices
+            n_slices (int): number of slices
+            slice_dim (int): dimension along which slices are taken
+
+        Returns:
+            t.tensor: likelihood image of voxel being inlier
+        """
+        likelihood_images = t.zeros_like(error_tensor, device=self.device)
+        for sl in range(0,n_slices):
             outlier_remover = Outlier_Removal_Voxels(error_tensor)
-            p_voxels = outlier_remover(error_tensor)
 
             if slice_dim == 0:
+                p_voxels = outlier_remover(error_tensor[sl,0,sl,:,:])
                 likelihood_images[sl,0,sl,:,:] = p_voxels
             elif slice_dim == 1:
+                p_voxels = outlier_remover(error_tensor[sl,0,:,sl,:])
                 likelihood_images[sl,0,:,sl,:] = p_voxels
             elif slice_dim == 2:
+                p_voxels = outlier_remover(error_tensor[sl,0,:,:,sl])
                 likelihood_images[sl,0,:,:,sl] = p_voxels
         return likelihood_images
 
-    def outlier_removal_slices(self,likelihood_images:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
+    def outlier_removal_slices(self, likelihood_images:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
 
-        outlier_remover = Outlier_Removal_Slices()
+        
 
         likelihood_images_squared = t.pow(likelihood_images,t.tensor(2))
         if slice_dim == 0:
@@ -319,6 +342,8 @@ class SVR_optimizer():
         elif slice_dim == 2:
             voxels_per_slice = t.numel(likelihood_images_squared[0,0,:,:,0])
             red_voxel_prob = t.sqrt( t.einsum('ijklm->m',likelihood_images_squared) / voxels_per_slice )
+        
+        outlier_remover = Outlier_Removal_Slices_cste(red_voxel_prob)
         
         p_slices = outlier_remover(red_voxel_prob)
         p_slices_output = t.zeros_like(likelihood_images)
