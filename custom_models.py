@@ -26,6 +26,8 @@ class Volume_to_Volume(t.nn.Module):
         self.rotations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(1)])
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(1)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
+        self.sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(7,3,axis=3,mode="zeros")
+
     
     def forward(self, fixed_volume_tensor:t.tensor, fixed_volume_meta:dict, stack_meta:dict, mode = "bilinear")->tuple:
         """
@@ -58,6 +60,10 @@ class Volume_to_Volume(t.nn.Module):
         
 
         fixed_volume_tensor_transformed = self.affine_layer(fixed_volume_tensor_batch, inv_affines)
+
+        fixed_volume_tensor_transformed = fixed_volume_tensor_transformed.cpu()
+        fixed_volume_tensor_transformed = self.sav_gol_layer(fixed_volume_tensor_transformed)
+        fixed_volume_tensor_transformed = fixed_volume_tensor_transformed.to(self.device)
 
         return fixed_volume_tensor_transformed, affines
     
@@ -155,6 +161,7 @@ class Volume_to_Slice(t.nn.Module):
 
         #SavGol filter requires tensor on cpu
         fixed_image_tran = fixed_image_tran.cpu()
+
         fixed_image_tran = self.sav_gol_layer(fixed_image_tran)
 
         fixed_image_tran = fixed_image_tran.to(self.device)
