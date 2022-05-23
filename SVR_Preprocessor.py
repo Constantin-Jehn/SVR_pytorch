@@ -10,7 +10,7 @@ from monai.transforms import (
 )
 import os
 import numpy as np
-from zmq import device
+#from zmq import device
 import custom_models
 import torch as t
 from copy import deepcopy
