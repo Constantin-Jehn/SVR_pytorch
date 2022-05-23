@@ -56,7 +56,7 @@ class SVR_optimizer():
 
         self.golay_smoother = monai.transforms.SavitzkyGolaySmooth(7,3, axis=3, mode='zeros')
 
-        self.writer = SummaryWriter("runs/eight_epochs_ncc_golay_slice")
+        self.writer = SummaryWriter("runs/Ep_8_ncc_golay_forward_update_7-3")
 
 
           
