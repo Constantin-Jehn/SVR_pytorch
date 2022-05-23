@@ -65,12 +65,12 @@ def optimize():
    
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
-    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
+    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","Ep_8_ncc_golay_update_7-3_dim_3_slice")
+    result_folder = os.path.join("results","Ep_8_ncc_golay_update_7-4_dim_3")
     
     try:
         os.mkdir(result_folder)

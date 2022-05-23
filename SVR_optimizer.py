@@ -219,8 +219,8 @@ class SVR_optimizer():
 
                 timer = time.time()
                 #multiply likelihood to each voxel for outlier removal
-                local_slices = t.mul(local_slices, t.mul(likelihood_images_voxels, likelihood_images_slices))
-                #local_slices = t.mul(local_slices, likelihood_images_voxels)
+                #local_slices = t.mul(local_slices, t.mul(likelihood_images_voxels, likelihood_images_slices))
+                local_slices = t.mul(local_slices, likelihood_images_voxels)
 
                 affines_tmp = affines_slices[st]
                 #apply affines to transform slices
