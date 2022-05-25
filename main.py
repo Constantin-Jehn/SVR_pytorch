@@ -65,12 +65,12 @@ def optimize():
    
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
-    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
+    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","Ep_8_ncc_golay_forward_update_7-3_100_cste")
+    result_folder = os.path.join("results","Ep_8_2_new_affine")
     
     try:
         os.mkdir(result_folder)
@@ -85,8 +85,8 @@ def optimize():
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
     epochs = 8
-    inner_epochs = 2
-    lr = 0.002
+    inner_epochs = 3
+    lr = 0.003
     loss_fnc = "ncc"
     opt_alg = "Adam"
     

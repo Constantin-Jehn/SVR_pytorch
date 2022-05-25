@@ -56,7 +56,7 @@ class SVR_optimizer():
 
         self.golay_smoother = monai.transforms.SavitzkyGolaySmooth(7,3, axis=3, mode='zeros')
 
-        self.writer = SummaryWriter("runs/Ep_8_ncc_golay_forward_update_7-3")
+        self.writer = SummaryWriter("runs/debug")
 
 
           
@@ -154,8 +154,6 @@ class SVR_optimizer():
                 model = custom_models.Volume_to_Slice(n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode)
                 model.to(self.device)
 
-                
-                
                 if opt_alg == "SGD":
                     optimizer = t.optim.SGD(model.parameters(), lr = lr)
                 elif(opt_alg == "Adam"):
@@ -176,18 +174,26 @@ class SVR_optimizer():
                     #in shape (n_slices,1,[stack_shape]) affines 
                     
                     tr_fixed_images, affines_tmp = model(fixed_image_tensor.detach(), fixed_image_meta["affine"], local_stack_tio.tensor, local_stack_tio.affine)
-                    """
+                    
                     if epoch == 0 and st == 0:
                         model_tensor_board = custom_models.Volume_to_Slice(n_slices=2, device=self.device, mode = self.mode, tio_mode = self.tio_mode)
                         red_input = fixed_image_tensor[:,:,0:2,:,:].detach()
                         self.writer.add_graph(model_tensor_board,(red_input, t.tensor(fixed_image_meta["affine"]), local_stack_tio.tensor, t.tensor(local_stack_tio.affine)))
                         self.writer.close
-                    """
+                    
                     tr_fixed_images = tr_fixed_images.to(self.device)
                     
                     #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
+                    
+                    if epoch == 0 and st == 0:
+                        model_tensor_board = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
+                        red_fixed, red_local = tr_fixed_images[0:2,:,:,:,0:2].detach(), local_slices[0:2,:,:,:,0:2]
+                        self.writer.add_graph(model_tensor_board,(red_fixed, red_local,t.tensor(2.0),t.tensor(2.0)))
+                        self.writer.close
+                        
                     loss_tensor = loss(tr_fixed_images, local_slices, n_slices[st], slice_dims[st])
                     print(f'loss: {loss_tensor.item()}')
+
                     loss_tensor.backward(retain_graph = False)
 
                     if inner_epoch == 0:
@@ -208,7 +214,8 @@ class SVR_optimizer():
                     #multipy the new transform to the existing transform
                     #order second argument is the first transform
                     #this is necessary because the reference image was moved by by affines_tmp
-                    affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
+                    #affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
+                    affines_slices[st][sl,:,:] = affines_tmp[sl]
                 
                 timer = time.time()
                 error_tensor = self.get_error_tensor(tr_fixed_images, local_slices, n_slices[st], slice_dims[st])

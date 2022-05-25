@@ -13,6 +13,8 @@ import numpy as np
 
 import torchio as tio
 
+import scipy
+
 
 class Volume_to_Volume(t.nn.Module):
     """
@@ -143,13 +145,15 @@ class Volume_to_Slice(t.nn.Module):
 
 
         #create affines and inv affines
-        aff = self.create_T(self.rotations[0], self.translations[0])
+        aff = self.homogenous_affine(self.rotations[0],self.translations[0])
+
+        aff = self.homogenous_affine(self.rotations[0], self.translations[0])
         inv_aff = t.linalg.inv(aff)
         affines = aff.unsqueeze(0)
         inv_affines = inv_aff.unsqueeze(0)
         
         for sli in range(1,self.n_slices):
-            aff = self.create_T(self.rotations[sli], self.translations[sli])
+            aff = self.homogenous_affine(self.rotations[sli], self.translations[sli])
             inv_aff = t.linalg.inv(aff)
     
             affines = t.cat((affines,aff.unsqueeze(0)),0)
@@ -157,6 +161,8 @@ class Volume_to_Slice(t.nn.Module):
 
         #slice simulation by transforming fixed image by inv affine --> layer are only 2 dimensional and align with the slices
         # note that fixed image was resamples to local stack so dimensionality matches and we can forward the transformed fixed images directly to the loss
+        
+        
         fixed_image_tran = self.affine_layer(fixed_image_image_batch, inv_affines)
 
         #SavGol filter requires tensor on cpu
@@ -165,7 +171,10 @@ class Volume_to_Slice(t.nn.Module):
         fixed_image_tran = self.sav_gol_layer(fixed_image_tran)
 
         fixed_image_tran = fixed_image_tran.to(self.device)
+        
 
+        #fixed_image_tran = t.mul(fixed_image_tensor,self.rotations[0][0])
+        
         return fixed_image_tran, affines
 
     def create_T(self,rotations, translations):
@@ -184,6 +193,53 @@ class Volume_to_Slice(t.nn.Module):
         translation_tensor = monai.transforms.utils.create_translate(3, translations, device = self.device, backend="torch")
         T = t.matmul(rotation_tensor,translation_tensor)
         return T
-            
-        
-        
+    
+    def homogenous_affine(self,rotations:t.tensor,translations:t.tensor)->t.tensor:
+        roll = rotations[0]
+        yaw =rotations[1]
+        pitch = rotations[2]
+
+        tensor_0 = t.tensor(0.0,requires_grad=True)
+        tensor_1 = t.tensor(1.0,requires_grad=True)
+
+        RX = t.stack([
+                        t.stack([tensor_1, tensor_0, tensor_0, tensor_0]),
+                        t.stack([tensor_0, t.cos(roll), -t.sin(roll), tensor_0]),
+                        t.stack([tensor_0, t.sin(roll), t.cos(roll), tensor_0]),
+                        t.stack([tensor_0, tensor_0, tensor_0, tensor_1])]).reshape(4,4)
+
+        RY = t.stack([
+                        t.stack([t.cos(pitch), tensor_0, t.sin(pitch), tensor_0]),
+                        t.stack([tensor_0, tensor_1, tensor_0, tensor_0]),
+                        t.stack([-t.sin(pitch), tensor_0, t.cos(pitch), tensor_0]),
+                        t.stack([tensor_0, tensor_0, tensor_0, tensor_1])]).reshape(4,4)
+
+        RZ = t.stack([
+                        t.stack([t.cos(yaw), -t.sin(yaw), tensor_0, translations[0]]),
+                        t.stack([t.sin(yaw), t.cos(yaw), tensor_0, translations[1]]),
+                        t.stack([tensor_0, tensor_0, tensor_1, translations[2] ]),
+                        t.stack([tensor_0, tensor_0, tensor_0, tensor_1])]).reshape(4,4)
+
+        R = t.mm(RZ, RY)
+        R = t.mm(R, RX)
+
+        return R
+
+"""    
+class PSF(t.nn.Module):
+    def __init__(self, kernel_size) -> None:
+        super().__init__()
+        padding = np.floor(kernel_size/2)
+        self.conv3d = t.nn.Conv3d(1,1, kernel_size, 1, padding, bias=False)
+    
+    def forward(self,x):
+        return self.conv3d(x)
+
+    def weights_init(self, kernel_size):
+        kernel_template = np.zeros(kernel_size,kernel_size,kernel_size)
+        kernel_center = np.floor(kernel_size)
+        kernel_template[kernel_center,kernel_center,kernel_center] = 1 
+        init_kernel = scipy.ndimage.gaussian_filter(kernel_template,sigma=1.5)
+        for _, f in self.conv3d.named_parameters():
+            f.data.copy_(t.from_numpy(init_kernel).unsqueeze(0).unsqueeze(0))
+"""
