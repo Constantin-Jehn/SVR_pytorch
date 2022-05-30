@@ -1,5 +1,5 @@
+
 from fileinput import filename
-from isort import file
 import torchio as tio
 import monai
 
@@ -78,6 +78,8 @@ class Preprocesser():
         #stacks = self.histogram_normalize_stacks(stacks)
         if save_intermediates:
             stacks = self.save_stacks(stacks, 'norm')
+
+        stacks = self.resample_stacks(stacks, init_pix_dim)
 
         fixed_image, stacks = self.create_common_volume_registration(stacks)
 
@@ -461,9 +463,24 @@ class Preprocesser():
 
         return fixed_image
 
+    def resample_stacks(self, stacks:list, pix_dim:tuple)->list:
+
+        stacks_updated = list()
+        resampler = tio.transforms.Resample(pix_dim, image_interpolation=self.tio_mode)
+        for st in range(0,len(stacks)):
+            tio_stack = self.monai_to_torchio(stacks[st])
+            tio_stack_resampled = resampler(tio_stack)
+            filename = stacks[st]["image_meta_dict"]["filename_or_obj"]
+            resampled_monai = self.update_monai_from_tio(tio_stack_resampled,stacks[st],filename)
+            resampled_monai["image"] = resampled_monai["image"].squeeze().unsqueeze(0)
+            stacks_updated.append(resampled_monai)
+        
+        return stacks_updated
+
+
     def monai_to_torchio(self, monai_dict:dict)->tio.ScalarImage:
         """
-        takes monai dict and return corresponding tio Image
+        takes monai dict and return corresponding tio Image, output is on cpu!!
 
         Args:
             monai_dict (dict):
@@ -475,7 +492,7 @@ class Preprocesser():
     
     def update_monai_from_tio(self, tio_image:tio.ScalarImage, monai_dict:dict, filename:str) -> dict:
         """
-        updated monai dict from given tio Image
+        updated monai dict from given tio Image, puts image back on current device (possibly gpu)
 
         Args:
             tio_image (tio.Image):

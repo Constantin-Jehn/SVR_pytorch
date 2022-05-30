@@ -122,27 +122,13 @@ class Volume_to_Slice(t.nn.Module):
         """
         local_stack_tio = tio.Image(tensor=local_stack_tensor, affine = local_stack_affine)
         resampler_tio = tio.transforms.Resample(local_stack_tio, image_interpolation= self.tio_mode)
-        resampler = monai.transforms.ResampleToMatch(mode = self.mode)
-        add_channel = AddChanneld(keys=["image"])
-        
-        
+
         #resample fixed image to local stack and repeat n_slices time for batch-format
-        """
-        fixed_image_tensor = fixed_image_tensor.squeeze().unsqueeze(0)
-        fixed_image_tensor, fixed_image_meta = resampler(fixed_image_tensor,src_meta=fixed_image_meta,
-                         dst_meta=local_stack_meta)
-        fixed_image_meta["spatial_shape"] = np.array(list(fixed_image_tensor.shape)[1:])
-        
-        fixed_image_tensor = fixed_image_tensor.unsqueeze(0)
-        
-        fixed_image_image_batch = fixed_image_tensor.repeat(self.n_slices,1,1,1,1)
-        """
         
         fixed_tio = tio.Image(tensor=fixed_image_tensor.squeeze().unsqueeze(0).detach().cpu(), affine=fixed_image_affine) 
         fixed_tio = resampler_tio(fixed_tio)
         fixed_image_tensor = fixed_tio.tensor.to(self.device)
         fixed_image_image_batch = fixed_image_tensor.repeat(self.n_slices,1,1,1,1)
-
 
         #create affines and inv affines
         aff = self.homogenous_affine(self.rotations[0],self.translations[0])
@@ -172,7 +158,6 @@ class Volume_to_Slice(t.nn.Module):
 
         fixed_image_tran = fixed_image_tran.to(self.device)
         
-
         #fixed_image_tran = t.mul(fixed_image_tensor,self.rotations[0][0])
         
         return fixed_image_tran, affines
@@ -199,8 +184,8 @@ class Volume_to_Slice(t.nn.Module):
         yaw =rotations[1]
         pitch = rotations[2]
 
-        tensor_0 = t.tensor(0.0,requires_grad=True)
-        tensor_1 = t.tensor(1.0,requires_grad=True)
+        tensor_0 = t.tensor(0.0,requires_grad=True, device = self.device)
+        tensor_1 = t.tensor(1.0,requires_grad=True, device=self.device)
 
         RX = t.stack([
                         t.stack([tensor_1, tensor_0, tensor_0, tensor_0]),

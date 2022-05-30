@@ -59,8 +59,6 @@ class SVR_optimizer():
         self.writer = SummaryWriter("runs/debug")
 
 
-          
-
     def construct_slices_from_stack(self, stack:dict, slice_dim):
         """Constructs slices from a single stack
 
@@ -114,7 +112,6 @@ class SVR_optimizer():
             loss_fnc (str, optional): loss function Defaults to "ncc".
             opt_alg (str, optional): optimization algorithm Defaults to "Adam".
         """
-        models = list()
         slices = list()
         n_slices = list()
         slice_dims = self.slice_dimensions
@@ -135,7 +132,7 @@ class SVR_optimizer():
         loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
         resampler = monai.transforms.ResampleToMatch(mode = self.mode)
         
-        common_volume = t.zeros_like(self.fixed_image["image"], device=self.device)
+        
         fixed_image_tensor = self.fixed_image["image"]
         fixed_image_meta = self.fixed_image["image_meta_dict"]
         
@@ -144,11 +141,13 @@ class SVR_optimizer():
         resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
 
         for epoch in range(0,epochs):
-            likelihood_image_storage = list()
+            common_volume = t.zeros_like(self.fixed_image["image"], device=self.device)
             tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio({"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta})
             resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
             print(f'\n\n Epoch: {epoch}')
 
+            registered_stacks = list()
+            
             for st in range (0, self.k):
                 print(f"\n  stack: {st}")
                 model = custom_models.Volume_to_Slice(n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode)
@@ -174,23 +173,23 @@ class SVR_optimizer():
                     #in shape (n_slices,1,[stack_shape]) affines 
                     
                     tr_fixed_images, affines_tmp = model(fixed_image_tensor.detach(), fixed_image_meta["affine"], local_stack_tio.tensor, local_stack_tio.affine)
-                    
+                    """
                     if epoch == 0 and st == 0:
                         model_tensor_board = custom_models.Volume_to_Slice(n_slices=2, device=self.device, mode = self.mode, tio_mode = self.tio_mode)
                         red_input = fixed_image_tensor[:,:,0:2,:,:].detach()
                         self.writer.add_graph(model_tensor_board,(red_input, t.tensor(fixed_image_meta["affine"]), local_stack_tio.tensor, t.tensor(local_stack_tio.affine)))
                         self.writer.close
-                    
+                    """
                     tr_fixed_images = tr_fixed_images.to(self.device)
                     
-                    #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
-                    
+                    """
                     if epoch == 0 and st == 0:
                         model_tensor_board = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
                         red_fixed, red_local = tr_fixed_images[0:2,:,:,:,0:2].detach(), local_slices[0:2,:,:,:,0:2]
                         self.writer.add_graph(model_tensor_board,(red_fixed, red_local,t.tensor(2.0),t.tensor(2.0)))
                         self.writer.close
-                        
+                    """
+                    #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
                     loss_tensor = loss(tr_fixed_images, local_slices, n_slices[st], slice_dims[st])
                     print(f'loss: {loss_tensor.item()}')
 
@@ -263,7 +262,7 @@ class SVR_optimizer():
                 print(f'common vol update:  {time.time() - timer} s ')
                 #update common volume from stack
                 common_volume = common_volume + common_stack
-            
+
             normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
             common_volume = normalizer(common_volume)
 
