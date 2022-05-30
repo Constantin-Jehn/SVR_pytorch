@@ -19,6 +19,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 import SimpleITK as sitk
 
+from SVR_Evaluation import psnr
+
 class SVR_optimizer():
     def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, monai_mode:str, tio_mode:str)->None:
         """
@@ -54,7 +56,7 @@ class SVR_optimizer():
 
         self.gaussian_smoother = monai.transforms.GaussianSmooth(sigma = 0.5)
 
-        self.golay_smoother = monai.transforms.SavitzkyGolaySmooth(7,3, axis=3, mode='zeros')
+        self.golay_smoother = monai.transforms.SavitzkyGolaySmooth(13,4, axis=3, mode='zeros')
 
         self.writer = SummaryWriter("runs/debug")
 
@@ -266,6 +268,9 @@ class SVR_optimizer():
                     common_stack = common_stack + tio_transformed_blurred.unsqueeze(0).to(self.device)
                     #common_stack = common_stack + tio_transformed.tensor.unsqueeze(0).to(self.device)
                 print(f'common vol update:  {time.time() - timer} s ')
+                fixed_dict = {"image": common_stack, "image_meta_dict": fixed_image_meta}
+                print(f'PSNR: {psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)}')
+
                 #update common volume from stack
                 common_volume = common_volume + common_stack
 
@@ -283,6 +288,9 @@ class SVR_optimizer():
             else:
                 self.svr_preprocessor.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,epoch)
             print(f'fixed_volume update:  {time.time() - timer} s ')
+
+            fixed_dict = {"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta}
+            print(f'PSNR: {psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)}')
 
     def get_error_tensor(self,tr_fixed_images:t.tensor, local_slices:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
         """_summary_

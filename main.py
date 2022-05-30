@@ -8,6 +8,7 @@ from SVR_optimizer import SVR_optimizer
 from SVR_Preprocessor import Preprocesser
 import errno
 
+
 def preprocess():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
     
@@ -70,7 +71,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","Ep_07_lr_0-003_Adam")
+    result_folder = os.path.join("results","Ep_07_lr_0-003_Adam_savgol_13_4")
     
     try:
         os.mkdir(result_folder)
@@ -85,7 +86,7 @@ def optimize():
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
     epochs = 7
-    inner_epochs = 3
+    inner_epochs = 1
     lr = 0.003
     loss_fnc = "ncc"
     opt_alg = "Adam"

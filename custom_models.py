@@ -100,7 +100,7 @@ class Volume_to_Slice(t.nn.Module):
         self.rotations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
-        self.sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(7,3,axis=3,mode="zeros")
+        self.sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(13,4,axis=3,mode="zeros")
         self.mode = mode
         self.tio_mode = tio_mode
 
@@ -146,7 +146,7 @@ class Volume_to_Slice(t.nn.Module):
             inv_affines = t.cat((inv_affines,inv_aff.unsqueeze(0)),0)
 
         #slice simulation by transforming fixed image by inv affine --> layer are only 2 dimensional and align with the slices
-        # note that fixed image was resamples to local stack so dimensionality matches and we can forward the transformed fixed images directly to the loss
+        # note that fixed image was resampled to local stack so dimensionality matches and we can forward the transformed fixed images directly to the loss
         
         
         fixed_image_tran = self.affine_layer(fixed_image_image_batch, inv_affines)
