@@ -119,12 +119,25 @@ class SVR_optimizer():
         
         #Afffine transformations for updating common volume from slices (use bilinear because it's 2d transform)
         affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
-        
+        models = list()
+        optimizers = list()
         for st in range(0,self.k):
             slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
             slices.append(slice_tmp)
             n_slices.append(n_slice)
-            #models.append(custom_models.Volume_to_Slice(n_slices=n_slice, device=self.device))
+            model_stack = custom_models.Volume_to_Slice(n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode)
+            model_stack.to(self.device)
+            models.append(model_stack)
+
+            if opt_alg == "SGD":
+                optimizer = t.optim.SGD(model_stack.parameters(), lr = lr)
+            elif(opt_alg == "Adam"):
+                optimizer = t.optim.Adam(model_stack.parameters(), lr = lr)
+            else:
+                assert("Choose SGD or Adam as optimizer")
+            
+            optimizers.append(optimizer)
+
             #store affine transforms
             affines_slices.append(t.eye(4, device=self.device).unsqueeze(0).repeat(n_slice,1,1))
             
@@ -150,16 +163,9 @@ class SVR_optimizer():
             
             for st in range (0, self.k):
                 print(f"\n  stack: {st}")
-                model = custom_models.Volume_to_Slice(n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode)
-                model.to(self.device)
+                model = models[st]
+                optimizer = optimizers[st]
 
-                if opt_alg == "SGD":
-                    optimizer = t.optim.SGD(model.parameters(), lr = lr)
-                elif(opt_alg == "Adam"):
-                    optimizer = t.optim.Adam(model.parameters(), lr = lr)
-                else:
-                    assert("Choose SGD or Adam as optimizer")
-                
                 local_stack = self.stacks[st]
                 local_slices = slices[st]
 
@@ -225,8 +231,8 @@ class SVR_optimizer():
 
                 timer = time.time()
                 #multiply likelihood to each voxel for outlier removal
-                #local_slices = t.mul(local_slices, t.mul(likelihood_images_voxels, likelihood_images_slices))
-                local_slices = t.mul(local_slices, likelihood_images_voxels)
+                local_slices = t.mul(local_slices, t.mul(likelihood_images_voxels, likelihood_images_slices))
+                #local_slices = t.mul(local_slices, likelihood_images_voxels)
 
                 affines_tmp = affines_slices[st]
                 #apply affines to transform slices
