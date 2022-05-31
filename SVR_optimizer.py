@@ -58,7 +58,6 @@ class SVR_optimizer():
 
         self.gaussian_smoother = monai.transforms.GaussianSmooth(sigma = 0.5)
 
-
         self.writer = SummaryWriter("runs/debug")
 
 
@@ -268,7 +267,7 @@ class SVR_optimizer():
                     slice_tio_transformed = resampling_to_fixed_tio(slice_tmp_tio)
 
                     #Gaussian kernel over each slice
-                    #tio_transformed_blurred = self.gaussian_smoother(tio_transformed.tensor)
+                    #tio_transformed_blurred = self.gaussian_smoother(slice_tio_transformed.tensor)
                     
                     #Use golay filter as PSF
                     tio_transformed_blurred = golay_smoother(slice_tio_transformed.tensor)
@@ -346,7 +345,7 @@ class SVR_optimizer():
         """
         likelihood_images = t.zeros_like(error_tensor, device=self.device)
         for sl in range(0,n_slices):
-            outlier_remover = Outlier_Removal_Voxels(error_tensor)
+            outlier_remover = Outlier_Removal_Voxels()
 
             if slice_dim == 0:
                 p_voxels = outlier_remover(error_tensor[sl,0,sl,:,:])
@@ -360,8 +359,6 @@ class SVR_optimizer():
         return likelihood_images
 
     def outlier_removal_slices(self, likelihood_images:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
-
-        
 
         likelihood_images_squared = t.pow(likelihood_images,t.tensor(2))
         if slice_dim == 0:
@@ -408,10 +405,6 @@ class SVR_optimizer():
         tensor = tensor.unsqueeze(0)
         return tensor
 
-
-
-
-    
 """
                for name, param in model.named_parameters():
                 if param.requires_grad:

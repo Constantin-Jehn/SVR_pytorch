@@ -101,6 +101,7 @@ class Volume_to_Slice(t.nn.Module):
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
         self.sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
+        self.gaussian_smoother = monai.networks.layers.GaussianFilter(spatial_dims=3, sigma = 0.5)
         self.mode = mode
         self.tio_mode = tio_mode
 
@@ -155,6 +156,7 @@ class Volume_to_Slice(t.nn.Module):
         fixed_image_tran = fixed_image_tran.cpu()
 
         fixed_image_tran = self.sav_gol_layer(fixed_image_tran)
+        #fixed_image_tran = self.gaussian_smoother(fixed_image_tran)
 
         fixed_image_tran = fixed_image_tran.to(self.device)
         

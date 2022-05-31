@@ -71,7 +71,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","Ep_10_lr_0-002_Adam_savgol_13_4")
+    result_folder = os.path.join("results","initial_outlier_removal_without_PSF")
     
     try:
         os.mkdir(result_folder)
@@ -86,7 +86,7 @@ def optimize():
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
     epochs = 2
-    inner_epochs = 1
+    inner_epochs = 3
     lr = 0.002
     loss_fnc = "ncc"
     opt_alg = "Adam"

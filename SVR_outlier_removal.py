@@ -11,7 +11,7 @@ class Outlier_Removal_Voxels(t.nn.Module):
     and uniform distribution with densitiy m for outliers.
     Parameter fitting using EM-algorithm.
     """
-    def __init__(self, e:t.tensor) -> None:
+    def __init__(self) -> None:
         """
         Construcor of outlier using EM algorithm
 
@@ -20,9 +20,8 @@ class Outlier_Removal_Voxels(t.nn.Module):
         """
         super().__init__()
         #calculated constant density of outlier distribution as reciprocal of the range of e
-        range_e = (t.max(e) - t.min(e)).item()
-        self.m = 1 / range_e
         #use zero mean of gaussian
+        self.m = 0.1
         self.mu = 0
     
     def gaussian(self, e:t.tensor, variance:t.tensor)->t.tensor:
@@ -81,6 +80,9 @@ class Outlier_Removal_Voxels(t.nn.Module):
         Returns:
             t.tensor: inlier probabilities
         """
+        range_e = (t.max(e) - t.min(e)).item()
+        self.m = 1 * (1 / range_e)
+
         avg_likelihoods = []
         likelihood_image_old = t.zeros_like(e)
         avg_delta = 1

@@ -18,6 +18,7 @@ import loss_module
 import time
 import SimpleITK as sitk
 import torchvision as tv
+from SVR_outlier_removal import Outlier_Removal_Slices_cste, Outlier_Removal_Voxels
 #from torch.utils.tensorboard import SummaryWriter
 
 class Preprocesser():
@@ -82,6 +83,8 @@ class Preprocesser():
         stacks = self.resample_stacks(stacks, init_pix_dim)
 
         fixed_image, stacks = self.create_common_volume_registration(stacks)
+
+        #stacks = self.outlier_removal(fixed_image, stacks)
 
         fixed_image = self.resample_fixed_image(fixed_image, init_pix_dim)
 
@@ -248,7 +251,7 @@ class Preprocesser():
         return stacks
 
 
-    def create_common_volume_registration(self, stacks:list)->tuple:
+    def create_common_volume_registration(self, stacks:list, sav_gol_kernel_size:int=13, sav_gol_order:int=4)->tuple:
         """
         creates common volume and return registered stacks
 
@@ -273,13 +276,15 @@ class Preprocesser():
         tio_common_image = self.monai_to_torchio(stacks[0])
         resample_to_common = tio.transforms.Resample(tio_common_image, image_interpolation=self.tio_mode)
 
+        sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
+
         for st in range(1, self.k):
             stack_tensor = stacks[st]["image"].unsqueeze(0)
             stack_meta = stacks[st]["image_meta_dict"]
 
             model = custom_models.Volume_to_Volume(device=self.device)
             loss = loss_module.Loss_Volume_to_Volume("ncc", self.device)
-            optimizer = t.optim.Adam(model.parameters(), lr=0.0005)
+            optimizer = t.optim.Adam(model.parameters(), lr=0.001)
 
             for ep in range(0, 15):
                 transformed_fixed_tensor, affine_tmp = model(common_tensor.detach(),fixed_meta,stack_meta)
@@ -294,12 +299,16 @@ class Preprocesser():
 
             transformed_fixed_tensor = transformed_fixed_tensor.detach()
 
+            #remove outlier
+            #stacks[st] = self.outlier_removal(transformed_fixed_tensor,stacks[st])
+            #stack_tensor = stacks[st]["image"].unsqueeze(0)
+            
             #comment out for control
             stacks[st]["image"] = affine_transform_monai(stack_tensor, affine_tmp)
 
             tio_stack = self.monai_to_torchio(stacks[st])
             
-            tio_stack = resample_to_common(tio_stack) 
+            tio_stack = resample_to_common(tio_stack)
 
             stacks[st] = self.update_monai_from_tio(tio_stack,stacks[st],stacks[st]["image_meta_dict"]["filename_or_obj"])
 
@@ -310,6 +319,32 @@ class Preprocesser():
         #common_tensor = t.div(common_tensor, t.max(common_tensor)/2047)
 
         return {"image": common_tensor.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta}, stacks
+
+    def outlier_removal(self, transformed_fixed_tensor:t.tensor, stack:dict):
+        """
+        outlier removal during initial registration
+
+        Args:
+            transformed_fixed_image (dict): common volume after 3d-3d registration
+            stacks (list): list of stacks to be registered
+        """
+        transformed_fixed_tensor = transformed_fixed_tensor.squeeze().unsqueeze(0)
+        stack_tensor =  stack["image"]
+        likelihood_image = t.zeros_like(stack_tensor)
+        n_slices = stack_tensor.shape[-1]
+
+        outlier_remover = Outlier_Removal_Voxels()
+
+        for sl in range(0,n_slices):
+            error_tensor = transformed_fixed_tensor[0,:,:,sl] - stack_tensor[0,:,:,sl]
+            p = outlier_remover(error_tensor)
+            likelihood_image[0,:,:,sl] = p
+
+        stack_tensor_corrected = t.mul(stack_tensor,likelihood_image)
+
+        stack["image"] = stack_tensor_corrected
+        return stack
+
 
     def histogram_normalize_stacks(self, stacks:list)->tuple:
         """        
