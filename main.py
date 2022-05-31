@@ -71,7 +71,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","Ep_07_lr_0-003_Adam_savgol_13_4")
+    result_folder = os.path.join("results","Ep_10_lr_0-002_Adam_savgol_13_4")
     
     try:
         os.mkdir(result_folder)
@@ -79,19 +79,21 @@ def optimize():
         if exc.errno != errno.EEXIST:
             raise
         pass
-    mode = "bicubic"
 
+    mode = "bicubic"
     tio_mode = "welch"
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
-    epochs = 7
+    epochs = 2
     inner_epochs = 1
-    lr = 0.003
+    lr = 0.002
     loss_fnc = "ncc"
     opt_alg = "Adam"
+    sav_gol_kernel_size = 13
+    sav_gol_order = 4
     
-    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, loss_fnc=loss_fnc, opt_alg=opt_alg)
+    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, loss_fnc=loss_fnc, opt_alg=opt_alg, sav_gol_kernel_size=sav_gol_kernel_size, sav_gol_order = sav_gol_order)
     
 if __name__ == '__main__':
     optimize()

@@ -92,7 +92,7 @@ class Volume_to_Slice(t.nn.Module):
     class to perform 3d-2d registration, aligns the fixed image to a slice by "inv_affines",
     affine can be used later to resample the slice to the fixed image
     """
-    def __init__(self, n_slices:int, device, mode = "bilinear", tio_mode = "welch"):
+    def __init__(self, n_slices:int, device, mode = "bilinear", tio_mode = "welch", sav_gol_kernel_size:int = 13, sav_gol_order = 4):
         super().__init__()
         
         self.device = device
@@ -100,7 +100,7 @@ class Volume_to_Slice(t.nn.Module):
         self.rotations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
-        self.sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(13,4,axis=3,mode="zeros")
+        self.sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
         self.mode = mode
         self.tio_mode = tio_mode
 

@@ -24,7 +24,7 @@ def psnr(fixed_image:dict, stacks:list, n_slices:int, tio_mode:str)->float128:
             pred, target = fixed_resampled.tensor[0,:,:,sl], stack_tio.tensor[0,:,:,sl]
             psnr+=psnr_metric(pred,target)
     
-    return psnr/n_slices_total
+    return t.mean(t.div(psnr,n_slices_total))
 
 
 
