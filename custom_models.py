@@ -31,7 +31,7 @@ class Volume_to_Volume(t.nn.Module):
         self.sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(7,3,axis=3,mode="zeros")
 
     
-    def forward(self, fixed_volume_tensor:t.tensor, fixed_volume_meta:dict, stack_meta:dict, mode = "bilinear")->tuple:
+    def forward(self, fixed_volume_resampled_tensor:t.tensor)->tuple:
         """
         fixed_volume tensor is transformed by current roation and translation parameters of the model (to be precise the inverse of their affine)
         the actual affine is returned to align the stack to the fixed image outside this module
@@ -45,22 +45,24 @@ class Volume_to_Volume(t.nn.Module):
         Returns:
             tuple: fixed volume after transform, affine for stack
         """
-        resampler = monai.transforms.ResampleToMatch(mode = mode)
-        
+
         #create affines and inv affines
         aff = self.create_T(self.rotations[0], self.translations[0])
         inv_aff = t.linalg.inv(aff)
         affines = aff.unsqueeze(0)
         inv_affines = inv_aff.unsqueeze(0)
-        
-        #prepare fixed_volume tensor, resmapl
-        fixed_volume_tensor = fixed_volume_tensor.squeeze().unsqueeze(0)
-        fixed_volume_tensor, fixed_volume_meta = resampler(fixed_volume_tensor,src_meta=fixed_volume_meta,
-                         dst_meta=stack_meta)
-        fixed_volume_meta["spatial_shape"] = np.array(list(fixed_volume_tensor.shape)[1:])
-        fixed_volume_tensor_batch = fixed_volume_tensor.unsqueeze(0)
-        
 
+        """
+        resampler = monai.transforms.ResampleToMatch(mode = mode)
+        #prepare fixed_volume tensor, resmapl
+        fixed_volume_resampled_tensor = fixed_volume_resampled_tensor.squeeze().unsqueeze(0)
+        fixed_volume_resampled_tensor, fixed_volume_meta = resampler(fixed_volume_resampled_tensor,src_meta=fixed_volume_meta,
+                         dst_meta=stack_meta)
+        fixed_volume_meta["spatial_shape"] = np.array(list(fixed_volume_resampled_tensor.shape)[1:])
+        """
+
+        fixed_volume_tensor_batch = fixed_volume_resampled_tensor.unsqueeze(0)
+        
         fixed_volume_tensor_transformed = self.affine_layer(fixed_volume_tensor_batch, inv_affines)
 
         fixed_volume_tensor_transformed = fixed_volume_tensor_transformed.cpu()
@@ -105,7 +107,7 @@ class Volume_to_Slice(t.nn.Module):
         self.mode = mode
         self.tio_mode = tio_mode
 
-    def forward(self, fixed_image_tensor:t.tensor, fixed_image_affine:t.tensor, local_stack_tensor:t.tensor, local_stack_affine:t.tensor)->tuple:
+    def forward(self, fixed_image_resampled_tensor:t.tensor)->tuple:
         """
         fixed volume is transformed by current parameter (rotations, translations) (to be precise by inverse of their affine)
         the actual affines (one per slice) are returned to be applied outside this module
@@ -121,6 +123,8 @@ class Volume_to_Slice(t.nn.Module):
         Returns:
             tuple: tensor containing the fixed images transformed by the inverse affines of each slice, affines for slices
         """
+
+        """
         local_stack_tio = tio.Image(tensor=local_stack_tensor, affine = local_stack_affine)
         resampler_tio = tio.transforms.Resample(local_stack_tio, image_interpolation= self.tio_mode)
 
@@ -129,7 +133,8 @@ class Volume_to_Slice(t.nn.Module):
         fixed_tio = tio.Image(tensor=fixed_image_tensor.squeeze().unsqueeze(0).detach().cpu(), affine=fixed_image_affine) 
         fixed_tio = resampler_tio(fixed_tio)
         fixed_image_tensor = fixed_tio.tensor.to(self.device)
-        fixed_image_image_batch = fixed_image_tensor.repeat(self.n_slices,1,1,1,1)
+        """
+        fixed_image_image_batch = fixed_image_resampled_tensor.repeat(self.n_slices,1,1,1,1)
 
         #create affines and inv affines
         aff = self.homogenous_affine(self.rotations[0],self.translations[0])

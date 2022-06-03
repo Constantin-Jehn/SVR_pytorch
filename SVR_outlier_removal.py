@@ -87,9 +87,9 @@ class Outlier_Removal_Voxels(t.nn.Module):
         likelihood_image_old = t.zeros_like(e)
         avg_delta = 1
         iterations = 0
-        variance = t.tensor(1)
+        variance = t.tensor(0.2)
         c = t.tensor(0.5)
-        while(avg_delta > 0.001  and iterations < 1000 ):
+        while(avg_delta > 0.001  and iterations < 3 ):
             p = self.expectation(e,variance, c)
             variance, c = self.maximization(e,p)
             #log_likelihood_image = t.log(p)
@@ -100,6 +100,7 @@ class Outlier_Removal_Voxels(t.nn.Module):
             avg_likelihoods.append(t.mean(p))
             #print(f'average delta: {avg_delta}')
             iterations = iterations + 1
+        #p[t.abs(e)>t.sqrt(variance)] = 0
         return p
 
 class Outlier_Removal_Slices_cste(t.nn.Module):
@@ -112,8 +113,12 @@ class Outlier_Removal_Slices_cste(t.nn.Module):
         """
         super().__init__()
         #calculated constant density of outlier distribution as reciprocal of the range of e
+        
+        #range_e = t.max(red_voxel_prob) - t.min(red_voxel_prob)
+
         range_e = len(red_voxel_prob)
-        self.m = 1 / range_e 
+        
+        self.m = (1 / range_e)
 
     def gaussian(self, red_voxel_prob:t.tensor, variance:t.tensor, mu:t.tensor)->t.tensor:
         """
@@ -194,7 +199,17 @@ class Outlier_Removal_Slices_cste(t.nn.Module):
             iterations = iterations + 1
         return p   
 
-
+class Outlier_Removal_Voxels_Huber(t.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    def forward(self,e:t.tensor):
+        e_abs = t.abs(e)
+        e_median = t.median(e_abs)
+        epsilon = 0.8 * e_median
+        p = t.zeros_like(e)
+        p[t.le(e_abs, epsilon)] = 1
+        p[t.gt(e_abs, epsilon)] = epsilon / e_abs[t.gt(e_abs, epsilon)]
+        return p
 
 class Outlier_Removal_Slices(t.nn.Module):
     def __init__(self) -> None:

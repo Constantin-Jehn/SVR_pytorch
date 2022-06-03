@@ -56,10 +56,14 @@ def optimize():
 
     """
     filenames = ["10_3T_nody_001.nii.gz",
+
                 
                 "14_3T_nody_001.nii.gz",
+
                 
                 "21_3T_nody_001.nii.gz",
+
+                
                 
                 "23_3T_nody_001.nii.gz"]
     
@@ -71,7 +75,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","initial_outlier_removal_without_PSF")
+    result_folder = os.path.join("results","new_outlier_removal_voxel_only")
     
     try:
         os.mkdir(result_folder)
@@ -85,8 +89,8 @@ def optimize():
     
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
-    epochs = 2
-    inner_epochs = 3
+    epochs = 3
+    inner_epochs = 2
     lr = 0.002
     loss_fnc = "ncc"
     opt_alg = "Adam"
