@@ -163,50 +163,52 @@ class SVR_optimizer():
             resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
             print(f'\n\n Epoch: {epoch}')
             
-            #outlier removal
-            for st in range (0, self.k):
-                local_stack = self.stacks[st]
-                local_slices = slices[st]
-
-                local_stack_tio = self.svr_preprocessor.monai_to_torchio(local_stack)
-
-                fixed_image_resampled_tensor = self.svr_preprocessor.resample_fixed_image_to_local_stack(fixed_image_tensor, fixed_image_meta["affine"], local_stack_tio.tensor,
-                                                                                        local_stack_tio.affine)
-                
+            #try outlier removal only in first epoch
+            if epoch == 0:
                 #outlier removal
-                likelihood_images_voxels = t.zeros_like(local_stack_tio.tensor, device=self.device)
-                local_stack_tensor = local_stack_tio.tensor.to(self.device)
-                error_tensor = fixed_image_resampled_tensor - local_stack_tensor
+                for st in range (0, self.k):
+                    local_stack = self.stacks[st]
+                    local_slices = slices[st]
 
-                outlier_remover = Outlier_Removal_Voxels()
-                for sl in range(0,n_slices[st]):
-                    likelihood_images_voxels[0,:,:,sl] = outlier_remover(error_tensor[0,:,:,sl])
+                    local_stack_tio = self.svr_preprocessor.monai_to_torchio(local_stack)
 
-                #for slice outlier removal
-                voxels_per_slice = t.numel(likelihood_images_voxels[0,:,:,sl])
+                    fixed_image_resampled_tensor = self.svr_preprocessor.resample_fixed_image_to_local_stack(fixed_image_tensor, fixed_image_meta["affine"], local_stack_tio.tensor,
+                                                                                            local_stack_tio.affine)
+                    
+                    #outlier removal
+                    likelihood_images_voxels = t.zeros_like(local_stack_tio.tensor, device=self.device)
+                    local_stack_tensor = local_stack_tio.tensor.to(self.device)
+                    error_tensor = fixed_image_resampled_tensor - local_stack_tensor
 
-                likelihood_images_slices = t.zeros_like(local_stack_tio.tensor, device=self.device)
-                likelihood_images_squared = t.pow(likelihood_images_voxels,2)
-                red_voxel_prob = t.sqrt( t.einsum('jklm->m',likelihood_images_squared) / voxels_per_slice )
-                outlier_remover_slices = Outlier_Removal_Slices_cste(red_voxel_prob)
-                
-                p_slices = outlier_remover_slices(red_voxel_prob)
+                    outlier_remover = Outlier_Removal_Voxels()
+                    for sl in range(0,n_slices[st]):
+                        likelihood_images_voxels[0,:,:,sl] = outlier_remover(error_tensor[0,:,:,sl])
 
-                for sl in range(0,n_slices[st]):
-                    likelihood_images_slices[0,:,:,sl] = p_slices[sl]
+                    #for slice outlier removal
+                    voxels_per_slice = t.numel(likelihood_images_voxels[0,:,:,sl])
 
-                #local_stack_tio.set_data(t.mul(local_stack_tio.tensor, t.mul(likelihood_images_voxels,likelihood_images_slices)))
-                local_stack_tio.set_data(t.mul(local_stack_tio.tensor, likelihood_images_voxels))
-                local_stack_transformed = resampling_to_fixed_tio(local_stack_tio)
-                local_stack_tensor = local_stack_transformed.tensor.to(self.device)
-                local_stack_blurred = golay_smoother(local_stack_tensor)
-                common_volume = common_volume + local_stack_blurred.unsqueeze(0)
+                    likelihood_images_slices = t.zeros_like(local_stack_tio.tensor, device=self.device)
+                    likelihood_images_squared = t.pow(likelihood_images_voxels,2)
+                    red_voxel_prob = t.sqrt( t.einsum('jklm->m',likelihood_images_squared) / voxels_per_slice )
+                    outlier_remover_slices = Outlier_Removal_Slices_cste(red_voxel_prob)
+                    
+                    p_slices = outlier_remover_slices(red_voxel_prob)
+
+                    for sl in range(0,n_slices[st]):
+                        likelihood_images_slices[0,:,:,sl] = p_slices[sl]
+
+                    #local_stack_tio.set_data(t.mul(local_stack_tio.tensor, t.mul(likelihood_images_voxels,likelihood_images_slices)))
+                    local_stack_tio.set_data(t.mul(local_stack_tio.tensor, likelihood_images_voxels))
+                    local_stack_transformed = resampling_to_fixed_tio(local_stack_tio)
+                    local_stack_tensor = local_stack_transformed.tensor.to(self.device)
+                    local_stack_blurred = golay_smoother(local_stack_tensor)
+                    common_volume = common_volume + local_stack_blurred.unsqueeze(0)
 
 
-            normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
-            common_volume = normalizer(common_volume)
-            fixed_image_tensor = common_volume
-            common_volume = t.zeros_like(fixed_image_tensor)
+                normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
+                common_volume = normalizer(common_volume)
+                fixed_image_tensor = common_volume
+                common_volume = t.zeros_like(fixed_image_tensor)
 
             #save fixed image of current epoch
 
@@ -230,6 +232,7 @@ class SVR_optimizer():
 
                 local_stack = self.stacks[st]
                 local_slices = slices[st]
+                
                 local_stack_tio = self.svr_preprocessor.monai_to_torchio(local_stack)
 
                 fixed_image_resampled_tensor = self.svr_preprocessor.resample_fixed_image_to_local_stack(fixed_image_tensor, fixed_image_meta["affine"], local_stack_tio.tensor,
@@ -246,6 +249,14 @@ class SVR_optimizer():
                     #in shape (n_slices,1,[stack_shape]) affines
                     tr_fixed_images, affines_tmp = model(fixed_image_resampled_tensor.detach())
 
+                    tr_fixed_images = tr_fixed_images.to(self.device)
+                    #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
+                    loss_tensor = loss(tr_fixed_images, local_slices, n_slices[st], slice_dims[st])
+                    print(f'loss: {loss_tensor.item()}')
+                    loss_tensor.backward(retain_graph = False)
+                    
+                    optimizer.step()
+
                     #visualization of loss in tensorboard
                     if tensorboard:
                         if epoch == 0 and st == 0:
@@ -253,35 +264,16 @@ class SVR_optimizer():
                             red_input = fixed_image_tensor[:,:,0:2,:,:].detach()
                             self.writer.add_graph(model_tensor_board,(red_input, t.tensor(fixed_image_meta["affine"]), local_stack_tio.tensor, t.tensor(local_stack_tio.affine)))
                             self.writer.close
-                    
-                    tr_fixed_images = tr_fixed_images.to(self.device)
-                    """
-                    if epoch == 0 and st == 0:
-                        model_tensor_board = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
-                        red_fixed, red_local = tr_fixed_images[0:2,:,:,:,0:2].detach(), local_slices[0:2,:,:,:,0:2]
-                        self.writer.add_graph(model_tensor_board,(red_fixed, red_local,t.tensor(2.0),t.tensor(2.0)))
-                        self.writer.close
-                    """
-                    #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
-                    loss_tensor = loss(tr_fixed_images, local_slices, n_slices[st], slice_dims[st])
-                    print(f'loss: {loss_tensor.item()}')
 
-                    loss_tensor.backward(retain_graph = False)
+                            model_tensor_board = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
+                            red_fixed, red_local = tr_fixed_images[0:2,:,:,:,0:2].detach(), local_slices[0:2,:,:,:,0:2]
+                            self.writer.add_graph(model_tensor_board,(red_fixed, red_local,t.tensor(2.0),t.tensor(2.0)))
+                            self.writer.close
 
-                    if tensorboard:
                         if inner_epoch == 0:
                             self.writer.add_scalar(f"Loss_stack_{st}", loss_tensor.item(), epoch)
 
-                    """
-                    torchviz.make_dot(loss_tensor, params= dict(model.named_parameters()))
-                    for name, param in model.named_parameters():
-                        if param.requires_grad:
-                            print (f'parameter {name} has only zero values: {t.all(param.data == 0)}')
-                    """
-                    
-                    optimizer.step()
-                
-                self.writer.close()
+                        self.writer.close()
 
                 #update procedure
                 timer = time.time()
@@ -479,4 +471,9 @@ class SVR_optimizer():
             timer = time.time()
                     optimizer.step()
                     print(f'optimizer:  {time.time() - timer} s ')
+
+            torchviz.make_dot(loss_tensor, params= dict(model.named_parameters()))
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    print (f'parameter {name} has only zero values: {t.all(param.data == 0)}')
 """

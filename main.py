@@ -75,7 +75,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","new_outlier_removal_voxel_only")
+    result_folder = os.path.join("results","only_one_outl_removal")
     
     try:
         os.mkdir(result_folder)
