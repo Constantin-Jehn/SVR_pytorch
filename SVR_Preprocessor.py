@@ -254,10 +254,8 @@ class Preprocesser():
     def create_common_volume_registration(self, stacks:list, sav_gol_kernel_size:int=13, sav_gol_order:int=4)->tuple:
         """
         creates common volume and return registered stacks
-
         Args:
             stacks (list): initial stacks
-
         Returns:
             tuple: inital fixed image, list of preregistered stacks
         """
@@ -279,15 +277,18 @@ class Preprocesser():
         sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
 
         for st in range(1, self.k):
-            stack_tensor = stacks[st]["image"].unsqueeze(0)
+            stack_tensor = stacks[st]["image"]
             stack_meta = stacks[st]["image_meta_dict"]
 
             model = custom_models.Volume_to_Volume(device=self.device)
             loss = loss_module.Loss_Volume_to_Volume("ncc", self.device)
             optimizer = t.optim.Adam(model.parameters(), lr=0.001)
 
+            fixed_image_resampled_tensor = self.resample_fixed_image_to_local_stack(common_tensor,fixed_meta["affine"],stack_tensor,stack_meta["affine"])
+            
+            stack_tensor = stacks[st]["image"].unsqueeze(0)
             for ep in range(0, 15):
-                transformed_fixed_tensor, affine_tmp = model(common_tensor.detach(),fixed_meta,stack_meta)
+                transformed_fixed_tensor, affine_tmp = model(fixed_image_resampled_tensor)
                 transformed_fixed_tensor = transformed_fixed_tensor.to(self.device)
                 loss_tensor = loss(transformed_fixed_tensor,stack_tensor)
                 loss_tensor.backward()
@@ -302,7 +303,7 @@ class Preprocesser():
             #remove outlier
             #stacks[st] = self.outlier_removal(transformed_fixed_tensor,stacks[st])
             #stack_tensor = stacks[st]["image"].unsqueeze(0)
-            
+
             #comment out for control
             stacks[st]["image"] = affine_transform_monai(stack_tensor, affine_tmp)
 
@@ -550,3 +551,22 @@ class Preprocesser():
         monai_dict = add_channel(monai_dict)
 
         return monai_dict
+
+
+    def resample_fixed_image_to_local_stack(self, fixed_image_tensor:t.tensor, fixed_image_affine:t.tensor, local_stack_tensor:t.tensor, local_stack_affine:t.tensor)->t.tensor:
+        """
+        Args:
+            fixed_image_tensor (t.tensor): 
+            fixed_image_affine (t.tensor): 
+            local_stack_tensor (t.tensor): 
+            local_stack_affine (t.tensor): 
+        Returns:
+            t.tensor: fixed_image_tensor resmpled to local stack
+        """
+        local_stack_tio = tio.Image(tensor=local_stack_tensor, affine = local_stack_affine)
+        resampler_tio = tio.transforms.Resample(local_stack_tio, image_interpolation= self.tio_mode)
+        #resample fixed image to loca stack
+        fixed_tio = tio.Image(tensor=fixed_image_tensor.squeeze().unsqueeze(0).detach().cpu(), affine=fixed_image_affine) 
+        fixed_tio = resampler_tio(fixed_tio)
+        fixed_image_tensor = fixed_tio.tensor.to(self.device)
+        return fixed_image_tensor

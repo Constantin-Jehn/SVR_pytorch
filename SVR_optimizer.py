@@ -172,6 +172,9 @@ class SVR_optimizer():
                 local_slices = slices[st]
 
                 local_stack_tio = self.svr_preprocessor.monai_to_torchio(local_stack)
+
+                fixed_image_resampled_tensor = self.svr_preprocessor.resample_fixed_image_to_local_stack(fixed_image_tensor, fixed_image_meta["affine"], local_stack_tio.tensor,
+                                                                                            local_stack_tio.affine)
                 
                 #optimization procedure
                 for inner_epoch in range(0,inner_epochs):
@@ -180,7 +183,7 @@ class SVR_optimizer():
 
                     #return fixed_images resamples to local stack where inverse affines were applied
                     #in shape (n_slices,1,[stack_shape]) affines 
-                    tr_fixed_images, affines_tmp = model(fixed_image_tensor.detach(), fixed_image_meta["affine"], local_stack_tio.tensor, local_stack_tio.affine)
+                    tr_fixed_images, affines_tmp = model(fixed_image_resampled_tensor.detach())
 
                     #visualization of loss in tensorboard
                     if tensorboard:
