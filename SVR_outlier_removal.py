@@ -89,7 +89,7 @@ class Outlier_Removal_Voxels(t.nn.Module):
         iterations = 0
         variance = t.tensor(1)
         c = t.tensor(0.5)
-        while(avg_delta > 0.001  and iterations < 1000 ):
+        while(avg_delta > 0.0001  and iterations < 1000 ):
             p = self.expectation(e,variance, c)
             variance, c = self.maximization(e,p)
             #log_likelihood_image = t.log(p)
@@ -181,7 +181,7 @@ class Outlier_Removal_Slices_cste(t.nn.Module):
         variance = t.tensor(1.0)
         mu = t.tensor(1.0)
         c = t.tensor(0.5)
-        while(avg_delta > 0.001  and iterations < 1000 ):
+        while(avg_delta > 0.0001  and iterations < 1000 ):
             p = self.expectation(red_voxel_prob,variance, mu, c)
             variance, mu, c = self.maximization(red_voxel_prob,p)
             #log_likelihood_image = t.log(p)
