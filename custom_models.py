@@ -21,14 +21,14 @@ class Volume_to_Volume(t.nn.Module):
     class to perform 3d-3d registration for initial alignment, fixed_image_volume is aligned to stack by inv_affine
     affine can be used later to resample stack to the fixed_volume
     """
-    def __init__(self, device):
+    def __init__(self, PSF, device):
         super().__init__()
 
         self.device = device
         self.rotations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(1)])
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(1)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
-        self.sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(7,3,axis=3,mode="zeros")
+        self.PSF = PSF
 
     
     def forward(self, fixed_volume_resampled_tensor:t.tensor)->tuple:
@@ -64,7 +64,7 @@ class Volume_to_Volume(t.nn.Module):
         fixed_volume_tensor_transformed = self.affine_layer(fixed_volume_tensor_batch, inv_affines)
 
         fixed_volume_tensor_transformed = fixed_volume_tensor_transformed.cpu()
-        fixed_volume_tensor_transformed = self.sav_gol_layer(fixed_volume_tensor_transformed)
+        fixed_volume_tensor_transformed = self.PSF(fixed_volume_tensor_transformed)
         fixed_volume_tensor_transformed = fixed_volume_tensor_transformed.to(self.device)
 
         return fixed_volume_tensor_transformed, affines
@@ -92,7 +92,7 @@ class Volume_to_Slice(t.nn.Module):
     class to perform 3d-2d registration, aligns the fixed image to a slice by "inv_affines",
     affine can be used later to resample the slice to the fixed image
     """
-    def __init__(self, n_slices:int, device, mode = "bilinear", tio_mode = "welch", sav_gol_kernel_size:int = 13, sav_gol_order = 4):
+    def __init__(self, PSF, n_slices:int, device, mode = "bilinear", tio_mode = "welch"):
         super().__init__()
         
         self.device = device
@@ -100,8 +100,7 @@ class Volume_to_Slice(t.nn.Module):
         self.rotations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
-        self.sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
-        self.gaussian_smoother = monai.networks.layers.GaussianFilter(spatial_dims=3, sigma = 0.5)
+        self.PSF = PSF
         self.mode = mode
         self.tio_mode = tio_mode
 
@@ -154,7 +153,7 @@ class Volume_to_Slice(t.nn.Module):
         #SavGol filter requires tensor on cpu
         fixed_image_tran = fixed_image_tran.cpu()
 
-        fixed_image_tran = self.sav_gol_layer(fixed_image_tran)
+        fixed_image_tran = self.PSF(fixed_image_tran)
         #fixed_image_tran = self.gaussian_smoother(fixed_image_tran)
 
         fixed_image_tran = fixed_image_tran.to(self.device)

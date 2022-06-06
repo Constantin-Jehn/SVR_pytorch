@@ -81,7 +81,10 @@ class Outlier_Removal_Voxels(t.nn.Module):
             t.tensor: inlier probabilities
         """
         range_e = (t.max(e) - t.min(e)).item()
-        self.m = 1 * (1 / range_e)
+        if range_e > 0.0:
+            self.m = 1 * (1 / range_e)
+        else:
+            self.m = 0.001
 
         avg_likelihoods = []
         likelihood_image_old = t.zeros_like(e)

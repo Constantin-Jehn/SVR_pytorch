@@ -71,7 +71,9 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_folder = os.path.join("results","standard_golay")
+    result_string = "Ep_8_lr_0-01"
+    result_folder = os.path.join("results", result_string)
+    tensor_board_folder = os.path.join("runs", result_string)
     
     try:
         os.mkdir(result_folder)
@@ -83,17 +85,21 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, monai_mode = mode, tio_mode = tio_mode)
     
-    epochs = 3
+    
+    epochs = 8
     inner_epochs = 2
-    lr = 0.002
+    lr = 0.01
     loss_fnc = "ncc"
     opt_alg = "Adam"
     sav_gol_kernel_size = 13
     sav_gol_order = 4
-    
-    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, loss_fnc=loss_fnc, opt_alg=opt_alg, sav_gol_kernel_size=sav_gol_kernel_size, sav_gol_order = sav_gol_order)
+
+    PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
+    #PSF_alternative = monai.transforms.GaussianSmooth(sigma = [0.1,0.1,0.5])
+
+    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, monai_mode = mode, tio_mode = tio_mode)
+    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensor_board_folder)
     
 if __name__ == '__main__':
     optimize()

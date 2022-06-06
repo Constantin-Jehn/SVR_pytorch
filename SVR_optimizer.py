@@ -22,7 +22,7 @@ import SimpleITK as sitk
 from SVR_Evaluation import psnr
 
 class SVR_optimizer():
-    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, monai_mode:str, tio_mode:str)->None:
+    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, PSF, monai_mode:str, tio_mode:str)->None:
         """
         constructer of SVR_optimizer class
 
@@ -50,15 +50,12 @@ class SVR_optimizer():
         
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
-        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0])
+        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF)
         
         self.ground_truth = self.stacks
 
         self.tio_mode = tio_mode
 
-        self.gaussian_smoother = monai.transforms.GaussianSmooth(sigma = 0.5)
-
-        self.writer = SummaryWriter("runs/debug")
 
 
     def construct_slices_from_stack(self, stack:dict, slice_dim):
@@ -102,7 +99,7 @@ class SVR_optimizer():
 
 
 
-    def optimize_volume_to_slice(self, epochs:int, inner_epochs:int, lr, loss_fnc = "ncc", opt_alg = "Adam", tensorboard = False, sav_gol_kernel_size:int=13, sav_gol_order:int = 4):
+    def optimize_volume_to_slice(self, epochs:int, inner_epochs:int, lr, PSF, loss_fnc = "ncc", opt_alg = "Adam", tensorboard:bool = False, tensorboard_path = ''):
         """
         optimizes transform of individual slices to mitigate motion artefact, uses initial 3d-3d registration
         implemented in SVR_Preprocessor
@@ -111,10 +108,13 @@ class SVR_optimizer():
             epochs (int): epochs of registration of all stacks
             inner_epochs (int): epochs of 3d-2d registration of each stack
             lr (_type_): learning rate of optimizer
+            PSF(functio): Point spread function
             loss_fnc (str, optional): loss function Defaults to "ncc".
-            opt_alg (str, optional): optimization algorithm Defaults to "Adam".
+            opt_alg (str, optional): optimization algorithm Defaults to "Adam"
+            tensorboard(bool):whether or not to write to tensorboard
         """
-        golay_smoother = monai.transforms.SavitzkyGolaySmooth(sav_gol_kernel_size, sav_gol_order, axis=3, mode='zeros')
+        #PSF = monai.transforms.SavitzkyGolaySmooth(sav_gol_kernel_size, sav_gol_order, axis=3, mode='zeros')
+        writer = SummaryWriter(tensorboard_path)
 
         slices = list()
         n_slices = list()
@@ -129,8 +129,7 @@ class SVR_optimizer():
             slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
             slices.append(slice_tmp)
             n_slices.append(n_slice)
-            model_stack = custom_models.Volume_to_Slice(n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode, 
-                                                        sav_gol_kernel_size = sav_gol_kernel_size, sav_gol_order=sav_gol_order)
+            model_stack = custom_models.Volume_to_Slice(PSF, n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode)
             model_stack.to(self.device)
             models.append(model_stack)
 
@@ -158,6 +157,8 @@ class SVR_optimizer():
 
         for epoch in range(0,epochs):
             common_volume = t.zeros_like(self.fixed_image["image"], device=self.device)
+            #used to compare to absence of outlier removal
+            common_volume_pure = t.zeros_like(self.fixed_image["image"], device=self.device)
             tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio({"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta})
             resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
             print(f'\n\n Epoch: {epoch}')
@@ -184,32 +185,27 @@ class SVR_optimizer():
                     #return fixed_images resamples to local stack where inverse affines were applied
                     #in shape (n_slices,1,[stack_shape]) affines 
                     tr_fixed_images, affines_tmp = model(fixed_image_resampled_tensor.detach())
-
-                    #visualization of loss in tensorboard
-                    if tensorboard:
-                        if epoch == 0 and st == 0:
-                            model_tensor_board = custom_models.Volume_to_Slice(n_slices=2, device=self.device, mode = self.mode, tio_mode = self.tio_mode)
-                            red_input = fixed_image_tensor[:,:,0:2,:,:].detach()
-                            self.writer.add_graph(model_tensor_board,(red_input, t.tensor(fixed_image_meta["affine"]), local_stack_tio.tensor, t.tensor(local_stack_tio.affine)))
-                            self.writer.close
-                    
                     tr_fixed_images = tr_fixed_images.to(self.device)
-                    """
-                    if epoch == 0 and st == 0:
-                        model_tensor_board = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
-                        red_fixed, red_local = tr_fixed_images[0:2,:,:,:,0:2].detach(), local_slices[0:2,:,:,:,0:2]
-                        self.writer.add_graph(model_tensor_board,(red_fixed, red_local,t.tensor(2.0),t.tensor(2.0)))
-                        self.writer.close
-                    """
-                    #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
+
                     loss_tensor = loss(tr_fixed_images, local_slices, n_slices[st], slice_dims[st])
                     print(f'loss: {loss_tensor.item()}')
 
                     loss_tensor.backward(retain_graph = False)
 
+                    optimizer.step()
+
+                    #visualization of loss in tensorboard
                     if tensorboard:
+                        """
+                        if epoch == 0 and st == 0:
+                            model_tensor_board = custom_models.Volume_to_Slice(n_slices=2, device=self.device, mode = self.mode, tio_mode = self.tio_mode)
+                            red_input = fixed_image_tensor[:,:,0:2,:,:].detach()
+                            writer.add_graph(model_tensor_board,(red_input, t.tensor(fixed_image_meta["affine"]), local_stack_tio.tensor, t.tensor(local_stack_tio.affine)))
+                            writer.close
+                        """
+                    #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
                         if inner_epoch == 0:
-                            self.writer.add_scalar(f"Loss_stack_{st}", loss_tensor.item(), epoch)
+                            writer.add_scalar(f"Loss_stack_{st}", loss_tensor.item(), epoch)
 
                     """
                     torchviz.make_dot(loss_tensor, params= dict(model.named_parameters()))
@@ -217,26 +213,24 @@ class SVR_optimizer():
                         if param.requires_grad:
                             print (f'parameter {name} has only zero values: {t.all(param.data == 0)}')
                     """
-                    
-                    optimizer.step()
-                
-                self.writer.close()
+                writer.close()
 
                 #update procedure
                 timer = time.time()
+
                 for sl in range(0,n_slices[st]):
-                    #multipy the new transform to the existing transform
-                    #order second argument is the first transform
-                    #this is necessary because the reference image was moved by by affines_tmp
-                    #affines_slices[st][sl,:,:] = t.matmul(affines_tmp[sl],affines_slices[st][sl,:,:])
                     affines_slices[st][sl,:,:] = affines_tmp[sl]
                 
                 timer = time.time()
+                
+                #uses difference to now transformed fixed images
                 error_tensor = self.get_error_tensor(tr_fixed_images, local_slices, n_slices[st], slice_dims[st])
+                
+                #error_tensor = (fixed_image_resampled_tensor - local_stack_tio.tensor).repeat(n_slices[st],1,1,1,1)
                 #outlier removal
                 likelihood_images_voxels = self.outlier_removal_voxels(error_tensor, n_slices[st], slice_dims[st])
                 likelihood_images_slices = self.outlier_removal_slices(likelihood_images_voxels, n_slices[st], slice_dims[st])
-                local_slices = t.mul(local_slices, t.mul(likelihood_images_voxels, likelihood_images_slices))
+                local_slices_outlier_removed = t.mul(local_slices, t.mul(likelihood_images_voxels, likelihood_images_slices))
                 #local_slices = t.mul(local_slices, likelihood_images_voxels)
                 print(f'outlier removal:  {time.time() - timer} s ')
 
@@ -244,57 +238,29 @@ class SVR_optimizer():
                 #multiply likelihood to each voxel for outlier removal
                 
                 affines_tmp = affines_slices[st]
-                """
-                the layer can only use "bilinear"
-                comment out for benchmark
-                use identitiy for benchmark
-                affines_tmp = t.eye(4).repeat(n_slices[st],1,1)
-                """
-
                 #apply affines to transform slices
-                transformed_slices = affine_transform_slices(local_slices, affines_tmp)
+                transformed_slices = affine_transform_slices(local_slices_outlier_removed, affines_tmp)
                 transformed_slices = transformed_slices.detach()
-
-                """
-                #leaves out 3d 2d registration
-                transformed_slices = local_slices
-                """
                 
                 #update current stack from slices
-                
-                common_stack = t.zeros_like(common_volume, device=self.device)
-
-                for sl in range(0,n_slices[st]):
-                    slice_tmp = transformed_slices[sl,:,:,:,:]
-                    slice_tmp_tio = tio.Image(tensor=slice_tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack["image_meta_dict"]["affine"])
-                    slice_tio_transformed = resampling_to_fixed_tio(slice_tmp_tio)
-
-                    #Gaussian kernel over each slice
-                    #tio_transformed_blurred = self.gaussian_smoother(slice_tio_transformed.tensor)
-                    
-                    #Use golay filter as PSF
-                    tio_transformed_blurred = golay_smoother(slice_tio_transformed.tensor)
-
-                    common_stack = common_stack + tio_transformed_blurred.unsqueeze(0).to(self.device)
-                    #common_stack = common_stack + tio_transformed.tensor.unsqueeze(0).to(self.device)    
-                print(f'common vol update:  {time.time() - timer} s ')
-
-                #PSNR output
-                fixed_dict = {"image": common_stack, "image_meta_dict": fixed_image_meta}
-                print(f'PSNR: {psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)}')
-
-                #update common volume from stack
-                common_volume = common_volume + common_stack
+                common_volume = self.update_common_volume_from_slices(common_volume,transformed_slices, n_slices, st, local_stack["image_meta_dict"]["affine"], PSF, resampling_to_fixed_tio, fixed_image_meta)
+                common_volume_pure = self.update_common_volume_from_slices(common_volume,affine_transform_slices(local_slices, affines_tmp).detach(), n_slices, st, local_stack["image_meta_dict"]["affine"], PSF, resampling_to_fixed_tio, fixed_image_meta)
 
             normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
             common_volume = normalizer(common_volume)
+            common_volume_pure = normalizer(common_volume_pure)
 
+            #update fixed_image
             timer = time.time()
             fixed_image_tensor = common_volume
+
             if epoch < epochs - 1:
                 #not last epoch yet --> upsample fixed_image if wanted
                 upsample_bool = (self.pixdims[epoch + 1] == self.pixdims[epoch])
                 fixed_image = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(fixed_image_tensor, fixed_image_meta, epoch, upsample=upsample_bool, pix_dim = self.pixdims[epoch+1])
+
+                #benchmark without outlier removal
+                _ = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(common_volume_pure, fixed_image_meta, int('2' + str(epoch)), upsample=upsample_bool, pix_dim = self.pixdims[epoch+1])
                 fixed_image_tensor = fixed_image["image"]
                 fixed_image_meta = fixed_image["image_meta_dict"]
                 common_volume = t.zeros_like(fixed_image_tensor)
@@ -406,8 +372,32 @@ class SVR_optimizer():
         tensor = t.permute(t.tensor(sitk.GetArrayFromImage(resampled)),(2,1,0))
 
         tensor = tensor.unsqueeze(0)
+
         return tensor
 
+    def update_common_volume_from_slices(self, common_volume:t.tensor, transformed_slices:t.tensor, n_slices:list, st:int, local_stack_affine:t.tensor, PSF, resampler, fixed_image_meta:dict)->t.tensor:
+        #update current stack from slices
+                common_stack = t.zeros_like(common_volume, device=self.device)
+                for sl in range(0,n_slices[st]):
+                    slice_tmp = transformed_slices[sl,:,:,:,:]
+                    slice_tmp_tio = tio.Image(tensor=slice_tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack_affine)
+                    slice_tio_transformed = resampler(slice_tmp_tio)
+
+                    #Gaussian kernel over each slice
+                    #tio_transformed_blurred = self.gaussian_smoother(slice_tio_transformed.tensor)
+                    #Use golay filter as PSF
+                    tio_transformed_blurred = PSF(slice_tio_transformed.tensor)
+
+                    common_stack = common_stack + tio_transformed_blurred.unsqueeze(0).to(self.device)
+                    #common_stack = common_stack + tio_transformed.tensor.unsqueeze(0).to(self.device)    
+
+                #PSNR output
+                fixed_dict = {"image": common_stack, "image_meta_dict": fixed_image_meta}
+                print(f'PSNR: {psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)}')
+
+                #update common volume from stack
+                common_volume = common_volume + common_stack
+                return common_volume
 """
                for name, param in model.named_parameters():
                 if param.requires_grad:
@@ -417,4 +407,12 @@ class SVR_optimizer():
             timer = time.time()
                     optimizer.step()
                     print(f'optimizer:  {time.time() - timer} s ')
+"""
+
+"""
+if epoch == 0 and st == 0:
+    model_tensor_board = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
+    red_fixed, red_local = tr_fixed_images[0:2,:,:,:,0:2].detach(), local_slices[0:2,:,:,:,0:2]
+    self.writer.add_graph(model_tensor_board,(red_fixed, red_local,t.tensor(2.0),t.tensor(2.0)))
+    self.writer.close
 """

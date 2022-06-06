@@ -47,7 +47,7 @@ class Preprocesser():
         self.tio_mode = tio_mode
         #self.writer = SummaryWriter("runs/test_session")
 
-    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, save_intermediates:bool=False)->tuple:
+    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False)->tuple:
         """        
         preprocessing procedure before the optimization contains:
         denoising, normalization, initial 3d-3d registration
@@ -82,7 +82,7 @@ class Preprocesser():
 
         stacks = self.resample_stacks(stacks, init_pix_dim)
 
-        fixed_image, stacks = self.create_common_volume_registration(stacks)
+        fixed_image, stacks = self.create_common_volume_registration(stacks, PSF)
 
         #stacks = self.outlier_removal(fixed_image, stacks)
 
@@ -251,7 +251,7 @@ class Preprocesser():
         return stacks
 
 
-    def create_common_volume_registration(self, stacks:list, sav_gol_kernel_size:int=13, sav_gol_order:int=4)->tuple:
+    def create_common_volume_registration(self, stacks:list, PSF)->tuple:
         """
         creates common volume and return registered stacks
         Args:
@@ -274,13 +274,11 @@ class Preprocesser():
         tio_common_image = self.monai_to_torchio(stacks[0])
         resample_to_common = tio.transforms.Resample(tio_common_image, image_interpolation=self.tio_mode)
 
-        sav_gol_layer = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
-
         for st in range(1, self.k):
             stack_tensor = stacks[st]["image"]
             stack_meta = stacks[st]["image_meta_dict"]
 
-            model = custom_models.Volume_to_Volume(device=self.device)
+            model = custom_models.Volume_to_Volume(PSF, device=self.device)
             loss = loss_module.Loss_Volume_to_Volume("ncc", self.device)
             optimizer = t.optim.Adam(model.parameters(), lr=0.001)
 
