@@ -125,6 +125,10 @@ class SVR_optimizer():
         affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
         models = list()
         optimizers = list()
+
+        schedulers = list()
+
+        lambda1 = lambda epoch: 0.8
         for st in range(0,self.k):
             slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
             slices.append(slice_tmp)
@@ -141,6 +145,9 @@ class SVR_optimizer():
                 assert("Choose SGD or Adam as optimizer")
             
             optimizers.append(optimizer)
+
+            scheduler = t.optim.lr_scheduler.MultiplicativeLR(optimizer,lambda1)
+            schedulers.append(scheduler)
 
             #store affine transforms
             affines_slices.append(t.eye(4, device=self.device).unsqueeze(0).repeat(n_slice,1,1))
@@ -168,6 +175,7 @@ class SVR_optimizer():
                 #each stack has its own model + optimizer
                 model = models[st]
                 optimizer = optimizers[st]
+                scheduler = schedulers[st]
 
                 local_stack = self.stacks[st]
                 local_slices = slices[st]
@@ -177,6 +185,9 @@ class SVR_optimizer():
                 fixed_image_resampled_tensor = self.svr_preprocessor.resample_fixed_image_to_local_stack(fixed_image_tensor, fixed_image_meta["affine"], local_stack_tio.tensor,
                                                                                             local_stack_tio.affine)
                 
+                if st == 0:
+                    print(f'learning rate: {optimizer.param_groups[0]["lr"]}')
+
                 #optimization procedure
                 for inner_epoch in range(0,inner_epochs):
                     model.train()
@@ -270,6 +281,10 @@ class SVR_optimizer():
 
             fixed_dict = {"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta}
             print(f'PSNR: {psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)}')
+
+            for st in range(0, self.k):
+                scheduler = schedulers[st]
+                scheduler.step()
 
     def get_error_tensor(self,tr_fixed_images:t.tensor, local_slices:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
         """_summary_
