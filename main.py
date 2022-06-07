@@ -71,7 +71,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_8_lr_0-01_decay0-8"
+    result_string = "Ep_8_lr_0-01_decay_to_0-002_without_norm"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
