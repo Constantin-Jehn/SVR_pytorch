@@ -1,6 +1,4 @@
 
-from turtle import forward
-from typing import Tuple
 #from sklearn.covariance import log_likelihood
 import torch as t
 import numpy as np
