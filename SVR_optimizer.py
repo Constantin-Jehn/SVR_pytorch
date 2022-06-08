@@ -147,7 +147,7 @@ class SVR_optimizer():
             
             optimizers.append(optimizer)
 
-            scheduler = t.optim.lr_scheduler.MultiStepLR(optimizer,milestones,gamma=0.2)
+            scheduler = t.optim.lr_scheduler.MultiStepLR(optimizer,milestones,gamma=0.25)
             schedulers.append(scheduler)
 
             #store affine transforms
@@ -258,14 +258,14 @@ class SVR_optimizer():
                 common_volume = self.update_common_volume_from_slices(common_volume,transformed_slices, n_slices, st, local_stack["image_meta_dict"]["affine"], PSF, resampling_to_fixed_tio, fixed_image_meta)
                 common_volume_pure = self.update_common_volume_from_slices(common_volume,affine_transform_slices(local_slices, affines_tmp).detach(), n_slices, st, local_stack["image_meta_dict"]["affine"], PSF, resampling_to_fixed_tio, fixed_image_meta)
 
-            """
+            
             if t.std(common_volume) != 0:
                 normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
                 common_volume = normalizer(common_volume)
             if t.std(common_volume_pure) != 0:
                 normalizer = tv.transforms.Normalize(t.mean(common_volume_pure), t.std(common_volume_pure))
                 common_volume_pure = normalizer(common_volume_pure)
-            """
+            
             #update fixed_image
             timer = time.time()
             fixed_image_tensor = common_volume

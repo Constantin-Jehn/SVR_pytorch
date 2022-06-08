@@ -10,7 +10,7 @@ class Loss_Volume_to_Volume(t.nn.Module):
     def __init__(self, loss_fnc:str, device) -> None:
         super().__init__()
         if loss_fnc == "ncc":
-            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=3, kernel_size=5)
+            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=3, kernel_size=21)
         elif loss_fnc == "mi":
             self.monai_loss = monai.losses.GlobalMutualInformationLoss(reduction = "sum")
         else:
@@ -35,7 +35,7 @@ class Loss_Volume_to_Slice(t.nn.Module):
     def __init__(self,loss_fnc:str,device):
         super(Loss_Volume_to_Slice,self).__init__()
         if loss_fnc == "ncc":
-            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=5)
+            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=21)
         elif loss_fnc == "mi":
             self.monai_loss = monai.losses.GlobalMutualInformationLoss(reduction = "sum")
         else:
