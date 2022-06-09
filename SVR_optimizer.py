@@ -128,7 +128,7 @@ class SVR_optimizer():
 
         schedulers = list()
 
-        lambda1 = lambda epoch: 0.2
+        lambda1 = lambda epoch: 0.5 if epoch in [1,2] else 0.8 if epoch in [6] else 1
         milestones = [2]
         for st in range(0,self.k):
             slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
@@ -147,7 +147,7 @@ class SVR_optimizer():
             
             optimizers.append(optimizer)
 
-            scheduler = t.optim.lr_scheduler.MultiStepLR(optimizer,milestones,gamma=0.25)
+            scheduler = t.optim.lr_scheduler.LambdaLR(optimizer,lambda1)
             schedulers.append(scheduler)
 
             #store affine transforms
