@@ -128,7 +128,8 @@ class SVR_optimizer():
 
         schedulers = list()
 
-        lambda1 = lambda epoch: 0.5 if epoch in [1,2] else 0.8 if epoch in [6] else 1
+        #lambda function for setting learning rate
+        lambda1 = lambda epoch: 1 if epoch in [0,1] else 0.5 if epoch in [2] else 0.25 if epoch in [3,4] else 0.2
         milestones = [2]
         for st in range(0,self.k):
             slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
@@ -216,8 +217,12 @@ class SVR_optimizer():
                             writer.close
                         """
                     #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
+                        if st == 0:
+                            writer.add_scalar(f"Learning_rate", optimizer.param_groups[0]["lr"], epoch)
+
                         if inner_epoch == 0:
                             writer.add_scalar(f"Loss_stack_{st}", loss_tensor.item(), epoch)
+
 
                     """
                     torchviz.make_dot(loss_tensor, params= dict(model.named_parameters()))

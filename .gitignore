@@ -6,7 +6,6 @@ __pycache__/
 .idea/
 test_reconstruction/
 test_reconstruction_monai/
-data/
 results/
 results_multi_res/
 results_single_res/
