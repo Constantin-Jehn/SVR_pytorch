@@ -132,6 +132,8 @@ class SVR_optimizer():
 
         #lambda function for setting learning rate
         lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
+
+        #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
         #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
         milestones = [2]
         for st in range(0,self.k):

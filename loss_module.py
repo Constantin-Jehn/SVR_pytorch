@@ -71,7 +71,7 @@ class Loss_Volume_to_Slice(t.nn.Module):
                 target = local_slices[sl,:,:,:,sl]
                 #print(f'pred: {str(pred.device)}, target: {str(target.device)}, loss: {str(loss.device)}')
             loss = loss + self.monai_loss(pred.unsqueeze(0),target.unsqueeze(0))
-            #loss = loss + ncc_loss(pred.unsqueeze(0),target.unsqueeze(0), device = self.device, win = self.kernel_size)
+            loss = loss + ncc_loss(pred.unsqueeze(0),target.unsqueeze(0), device = self.device, win = (self.kernel_size, self.kernel_size))
         return loss
  
 
