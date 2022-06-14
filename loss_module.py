@@ -1,8 +1,10 @@
+import imp
 from multiprocessing import reduction
 from turtle import forward
 import monai 
 import torch as t
 
+from voxelmorph_losses import ncc_loss
 class Loss_Volume_to_Volume(t.nn.Module):
     """
     class to calculate loss for initial 3d-3d registration
@@ -32,15 +34,17 @@ class Loss_Volume_to_Volume(t.nn.Module):
 class Loss_Volume_to_Slice(t.nn.Module):
     """class to calculate loss for 3d-2d registration
     """
-    def __init__(self,loss_fnc:str,device):
+    def __init__(self, kernel_size, loss_fnc:str,device):
         super(Loss_Volume_to_Slice,self).__init__()
         if loss_fnc == "ncc":
-            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=21)
+            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=kernel_size)
+            self.ncc_loss = ncc()
         elif loss_fnc == "mi":
             self.monai_loss = monai.losses.GlobalMutualInformationLoss(reduction = "sum")
         else:
             assert("Please choose a valid loss function: either ncc or mi")
         self.device = device
+        self.kernel_size = kernel_size
 
     def forward(self, tr_fixed_tensor:t.tensor, local_slices:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
         """_summary_
@@ -66,10 +70,30 @@ class Loss_Volume_to_Slice(t.nn.Module):
                 pred = tr_fixed_tensor[sl,:,:,:,sl]
                 target = local_slices[sl,:,:,:,sl]
                 #print(f'pred: {str(pred.device)}, target: {str(target.device)}, loss: {str(loss.device)}')
-            loss = loss + self.monai_loss(pred.unsqueeze(0), target.unsqueeze(0))
+            loss = loss + self.monai_loss(pred.unsqueeze(0),target.unsqueeze(0))
+            #loss = loss + ncc_loss(pred.unsqueeze(0),target.unsqueeze(0), device = self.device, win = self.kernel_size)
         return loss
+ 
+
+
+class ncc(t.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def forward(self, predicted:t.tensor, target:t.tensor) -> t.tensor:
+        predicted,target = predicted.squeeze(),target.squeeze()
+
+        std_pred, std_tgt = t.std(predicted), t.std(target)
+        mu_pred, mu_tgt = t.mean(predicted), t.mean(target)
+        n = t.numel(predicted)
+
+        zero_mean_pred, zero_mean_tgt = predicted - mu_pred, target - mu_tgt
+
+        nominator = t.sum((t.mul(zero_mean_pred,zero_mean_tgt))) + 1e-05
+        denominator = (n * std_pred * std_tgt + 1e-05)
+
+        return t.div(nominator,denominator)
 
 
 
-        
-    
+

@@ -128,8 +128,11 @@ class SVR_optimizer():
 
         schedulers = list()
 
+        losses = list()
+
         #lambda function for setting learning rate
-        lambda1 = lambda epoch: 1 if epoch in [0,1] else 0.5 if epoch in [2] else 0.25 if epoch in [3,4] else 0.2
+        lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
+        #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
         milestones = [2]
         for st in range(0,self.k):
             slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
@@ -138,6 +141,12 @@ class SVR_optimizer():
             model_stack = custom_models.Volume_to_Slice(PSF, n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode)
             model_stack.to(self.device)
             models.append(model_stack)
+
+            #set kernel size to smaller shape of stack
+            #kernel_size = min(self.stacks[st]["image"].shape[1], self.stacks[st]["image"].shape[2])
+            kernel_size = 31
+            loss = loss_module.Loss_Volume_to_Slice(kernel_size, loss_fnc, self.device)
+            losses.append(loss)
 
             if opt_alg == "SGD":
                 optimizer = t.optim.SGD(model_stack.parameters(), lr = lr)
@@ -155,7 +164,7 @@ class SVR_optimizer():
             affines_slices.append(t.eye(4, device=self.device).unsqueeze(0).repeat(n_slice,1,1))
             
                           
-        loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
+        #loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
         
         fixed_image_tensor = self.fixed_image["image"]
         fixed_image_meta = self.fixed_image["image_meta_dict"]
@@ -178,6 +187,7 @@ class SVR_optimizer():
                 model = models[st]
                 optimizer = optimizers[st]
                 scheduler = schedulers[st]
+                loss = losses[st]
 
                 local_stack = self.stacks[st]
                 local_slices = slices[st]
@@ -198,6 +208,7 @@ class SVR_optimizer():
                     #return fixed_images resamples to local stack where inverse affines were applied
                     #in shape (n_slices,1,[stack_shape]) affines 
                     tr_fixed_images, affines_tmp = model(fixed_image_resampled_tensor.detach())
+
                     tr_fixed_images = tr_fixed_images.to(self.device)
 
                     loss_tensor = loss(tr_fixed_images, local_slices, n_slices[st], slice_dims[st])

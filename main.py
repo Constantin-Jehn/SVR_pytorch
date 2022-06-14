@@ -71,7 +71,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_8_lr_0-01_decay_to_0-0025_loss_21_kernel"
+    result_string = "Ep_6_monai_ncc_14_06_15_30"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
@@ -85,7 +85,7 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 2
+    epochs = 6
     inner_epochs = 2
     lr = 0.01
     loss_fnc = "ncc"
