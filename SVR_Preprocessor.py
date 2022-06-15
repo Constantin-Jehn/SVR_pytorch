@@ -200,7 +200,7 @@ class Preprocesser():
                 stack_dict = to_device(stack_dict)
             stack_list.append(stack_dict)
         return stack_list
-        
+
 
     def denoising(self, stacks:list)->list:
         """Applies Gaussian Sharpen Filter to all stacks
@@ -566,7 +566,9 @@ class Preprocesser():
         local_stack_tio = tio.Image(tensor=local_stack_tensor, affine = local_stack_affine)
         resampler_tio = tio.transforms.Resample(local_stack_tio, image_interpolation= self.tio_mode)
         #resample fixed image to loca stack
-        fixed_tio = tio.Image(tensor=fixed_image_tensor.squeeze().unsqueeze(0).detach().cpu(), affine=fixed_image_affine) 
+        tensor_cpu = fixed_image_tensor.squeeze().unsqueeze(0).detach().cpu()
+        affine_cpu = fixed_image_affine.detach().cpu()
+        fixed_tio = tio.Image(tensor=tensor_cpu, affine=affine_cpu) 
         fixed_tio = resampler_tio(fixed_tio)
         fixed_image_tensor = fixed_tio.tensor.to(self.device)
         return fixed_image_tensor
