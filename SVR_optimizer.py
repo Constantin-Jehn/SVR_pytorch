@@ -142,8 +142,6 @@ class SVR_optimizer():
 
             self.fixed_image = fixed_image
 
-
-        
         fixed_image_tensor = self.fixed_image["image"]
         fixed_image_meta = self.fixed_image["image_meta_dict"]
         

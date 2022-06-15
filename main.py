@@ -49,7 +49,7 @@ def preprocess():
 
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-    
+    """
     filenames = ["10_3T_nody_001.nii.gz",
                 
                 "14_3T_nody_001.nii.gz"]
@@ -62,7 +62,7 @@ def optimize():
                 "21_3T_nody_001.nii.gz",
                 
                 "23_3T_nody_001.nii.gz"]
-"""
+
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
     pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
@@ -84,8 +84,8 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 1
-    inner_epochs = 1
+    epochs = 8
+    inner_epochs = 2
     lr = 0.01
     loss_fnc = "ncc"
     opt_alg = "Adam"
@@ -100,7 +100,7 @@ def optimize():
     PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
     #PSF_alternative = monai.transforms.GaussianSmooth(sigma = [0.1,0.1,0.5])
 
-    from_checkpoint = True
+    from_checkpoint = False
     last_rec_file = "reconstruction_volume_07.nii.gz"
 
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, monai_mode = mode, tio_mode = tio_mode)
