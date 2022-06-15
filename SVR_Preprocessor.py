@@ -563,10 +563,11 @@ class Preprocesser():
         Returns:
             t.tensor: fixed_image_tensor resmpled to local stack
         """
-        local_stack_tio = tio.Image(tensor=local_stack_tensor, affine = local_stack_affine)
+        local_stack_tensor_cpu = local_stack_tensor.detach().cpu()
+        local_stack_tio = tio.Image(tensor=local_stack_tensor_cpu, affine = local_stack_affine)
         resampler_tio = tio.transforms.Resample(local_stack_tio, image_interpolation= self.tio_mode)
         #resample fixed image to loca stack
-        tensor_cpu = fixed_image_tensor.squeeze().unsqueeze(0).detach().cpu()
+        tensor_cpu = fixed_image_tensor.squeeze().unsqueeze(0).cpu()
         affine_cpu = fixed_image_affine
         fixed_tio = tio.Image(tensor=tensor_cpu, affine=affine_cpu) 
         fixed_tio = resampler_tio(fixed_tio)
