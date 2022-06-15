@@ -6,6 +6,7 @@ __pycache__/
 .idea/
 test_reconstruction/
 test_reconstruction_monai/
+results_archive/
 results_multi_res/
 results_single_res/
 Computational_Graphs/
