@@ -567,7 +567,7 @@ class Preprocesser():
         resampler_tio = tio.transforms.Resample(local_stack_tio, image_interpolation= self.tio_mode)
         #resample fixed image to loca stack
         tensor_cpu = fixed_image_tensor.squeeze().unsqueeze(0).detach().cpu()
-        affine_cpu = fixed_image_affine.detach().cpu()
+        affine_cpu = fixed_image_affine
         fixed_tio = tio.Image(tensor=tensor_cpu, affine=affine_cpu) 
         fixed_tio = resampler_tio(fixed_tio)
         fixed_image_tensor = fixed_tio.tensor.to(self.device)
