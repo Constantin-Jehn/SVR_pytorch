@@ -49,7 +49,7 @@ def preprocess():
 
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-    """
+    
     filenames = ["10_3T_nody_001.nii.gz",
                 
                 "14_3T_nody_001.nii.gz"]
@@ -62,8 +62,7 @@ def optimize():
                 "21_3T_nody_001.nii.gz",
                 
                 "23_3T_nody_001.nii.gz"]
-
-
+"""
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
     pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
@@ -85,19 +84,27 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 8
-    inner_epochs = 2
+    epochs = 1
+    inner_epochs = 1
     lr = 0.01
     loss_fnc = "ncc"
     opt_alg = "Adam"
     sav_gol_kernel_size = 13
     sav_gol_order = 4
 
+    #lambda function for setting learning rate
+    lambda1 = lambda epoch: [1,0.5,0.25,0.25,0.25][epoch] if epoch  < 5  else 0.2
+    #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
+    #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
+
     PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
     #PSF_alternative = monai.transforms.GaussianSmooth(sigma = [0.1,0.1,0.5])
 
+    from_checkpoint = True
+    last_rec_file = "reconstruction_volume_07.nii.gz"
+
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, monai_mode = mode, tio_mode = tio_mode)
-    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensor_board_folder)
+    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensor_board_folder,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file)
     
 if __name__ == '__main__':
     optimize()

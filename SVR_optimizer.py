@@ -2,7 +2,8 @@ import torchio as tio
 import monai
 from monai.transforms import (
     AddChanneld,
-    Affine
+    LoadImaged,
+    ToTensord,
 )
 import torchvision as tv
 import os
@@ -56,6 +57,8 @@ class SVR_optimizer():
 
         self.tio_mode = tio_mode
 
+        self.result_folder = result_folder
+
 
 
     def construct_slices_from_stack(self, stack:dict, slice_dim):
@@ -99,7 +102,7 @@ class SVR_optimizer():
 
 
 
-    def optimize_volume_to_slice(self, epochs:int, inner_epochs:int, lr, PSF, loss_fnc = "ncc", opt_alg = "Adam", tensorboard:bool = False, tensorboard_path = ''):
+    def optimize_volume_to_slice(self, epochs:int, inner_epochs:int, lr, PSF, lambda_scheduler, loss_fnc = "ncc", opt_alg = "Adam", tensorboard:bool = False, tensorboard_path = '', from_checkpoint:bool=False, last_rec_file:str=''):
         """
         optimizes transform of individual slices to mitigate motion artefact, uses initial 3d-3d registration
         implemented in SVR_Preprocessor
@@ -109,64 +112,37 @@ class SVR_optimizer():
             inner_epochs (int): epochs of 3d-2d registration of each stack
             lr (_type_): learning rate of optimizer
             PSF(functio): Point spread function
+            lambda_scheduler(lambda-expression): controls learning rate schedule
             loss_fnc (str, optional): loss function Defaults to "ncc".
             opt_alg (str, optional): optimization algorithm Defaults to "Adam"
             tensorboard(bool):whether or not to write to tensorboard
+            from_checkpoint(bool):whether to start from checkpoint
+            last_rec_file(string): if starting from checkpoint name of last reconstruction file to start from
         """
-        #PSF = monai.transforms.SavitzkyGolaySmooth(sav_gol_kernel_size, sav_gol_order, axis=3, mode='zeros')
         writer = SummaryWriter(tensorboard_path)
-
-        slices = list()
-        n_slices = list()
-        slice_dims = self.slice_dimensions
-        affines_slices = list()
-        
         #Afffine transformations for updating common volume from slices (use bilinear because it's 2d transform)
         affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
-        models = list()
-        optimizers = list()
 
-        schedulers = list()
-
-        losses = list()
-
-        #lambda function for setting learning rate
-        lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
-
-        #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
-        #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
-        milestones = [2]
-        for st in range(0,self.k):
-            slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
-            slices.append(slice_tmp)
-            n_slices.append(n_slice)
-            model_stack = custom_models.Volume_to_Slice(PSF, n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode)
-            model_stack.to(self.device)
-            models.append(model_stack)
-
-            #set kernel size to smaller shape of stack
-            #kernel_size = min(self.stacks[st]["image"].shape[1], self.stacks[st]["image"].shape[2])
-            kernel_size = 31
-            loss = loss_module.Loss_Volume_to_Slice(kernel_size, loss_fnc, self.device)
-            losses.append(loss)
-
-            if opt_alg == "SGD":
-                optimizer = t.optim.SGD(model_stack.parameters(), lr = lr)
-            elif(opt_alg == "Adam"):
-                optimizer = t.optim.Adam(model_stack.parameters(), lr = lr)
-            else:
-                assert("Choose SGD or Adam as optimizer")
             
-            optimizers.append(optimizer)
-
-            scheduler = t.optim.lr_scheduler.LambdaLR(optimizer,lambda1)
-            schedulers.append(scheduler)
-
-            #store affine transforms
-            affines_slices.append(t.eye(4, device=self.device).unsqueeze(0).repeat(n_slice,1,1))
-            
-                          
+        models, optimizers, losses, schedulers, affines_slices, n_slices, slices, slice_dims = self.prepare_optimization(PSF, lambda_scheduler, opt_alg, loss_fnc, lr)
         #loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
+        if from_checkpoint:
+            models, optimizers = self.load_models_and_optimizers(PSF, lr)
+            ###load fixed_image_tensor
+            add_channel = AddChanneld(keys=["image"])
+            loader = LoadImaged(keys=["image"])
+            to_tensor = ToTensord(keys=["image"])
+
+            path = os.path.join(self.result_folder, last_rec_file)
+            fixed_image = {"image": path}
+            fixed_image = loader(fixed_image)
+            fixed_image = to_tensor(fixed_image)
+            fixed_image = add_channel(fixed_image)
+            fixed_image = add_channel(fixed_image)
+
+            self.fixed_image = fixed_image
+
+
         
         fixed_image_tensor = self.fixed_image["image"]
         fixed_image_meta = self.fixed_image["image_meta_dict"]
@@ -308,6 +284,8 @@ class SVR_optimizer():
             for st in range(0, self.k):
                 scheduler = schedulers[st]
                 scheduler.step()
+            
+            self.save_models_and_optimizers(models, optimizers)
 
     def get_error_tensor(self,tr_fixed_images:t.tensor, local_slices:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
         """_summary_
@@ -436,6 +414,117 @@ class SVR_optimizer():
                 #update common volume from stack
                 common_volume = common_volume + common_stack
                 return common_volume
+
+    def prepare_optimization(self, PSF,lambda1, opt_alg, loss_fnc, lr):
+        """
+        Prepar optimization, generate slices, load models, optimizers and scheduler
+
+        Args:
+            PSF (_type_): 
+            lambda1 (lambda-expression):
+            opt_alg (str): "Adam" or "SGD"
+            loss_fnc (str): "ncc" or "mi"
+            lr (float): learning rate
+
+        Returns:
+            tuple: models, optimizers, losses, schedulers, affines_slices, n_slices, slices, slice_dims
+        """
+        slices = list()
+        n_slices = list()
+        slice_dims = self.slice_dimensions
+        affines_slices = list()
+    
+        models = list()
+        optimizers = list()
+        schedulers = list()
+        losses = list()
+
+        for st in range(0,self.k):
+            slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
+            slices.append(slice_tmp)
+            n_slices.append(n_slice)
+            model_stack = custom_models.Volume_to_Slice(PSF, n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode)
+            model_stack.to(self.device)
+            models.append(model_stack)
+
+            #set kernel size to smaller shape of stack
+            #kernel_size = min(self.stacks[st]["image"].shape[1], self.stacks[st]["image"].shape[2])
+            kernel_size = 31
+            loss = loss_module.Loss_Volume_to_Slice(kernel_size, loss_fnc, self.device)
+            losses.append(loss)
+
+            if opt_alg == "SGD":
+                optimizer = t.optim.SGD(model_stack.parameters(), lr = lr)
+            elif(opt_alg == "Adam"):
+                optimizer = t.optim.Adam(model_stack.parameters(), lr = lr)
+            else:
+                assert("Choose SGD or Adam as optimizer")
+            
+            optimizers.append(optimizer)
+
+            scheduler = t.optim.lr_scheduler.LambdaLR(optimizer,lambda1)
+            schedulers.append(scheduler)
+
+            #store affine transforms
+            affines_slices.append(t.eye(4, device=self.device).unsqueeze(0).repeat(n_slice,1,1))
+
+        return models, optimizers, losses, schedulers, affines_slices, n_slices, slices, slice_dims
+
+    def save_models_and_optimizers(self, models:list, optimizers:list):
+        """Saves models and optimizers as checkpoint
+        referenc: https://pytorch.org/tutorials/beginner/saving_loading_models.html#warmstarting-model-using-parameters-from-a-different-model
+
+        Args:
+            models (list): list of the models
+            optimizers (list): list of the optimizers
+        """
+        model_dict = {}
+        n_models = len(models)
+        model_dict["n_models"] = n_models
+
+        for i in range(0,n_models):
+            model_str = "model_" + str(i) +"_state_dict"
+            opt_str = "optimizer_" + str(i) + "_state_dict"
+            n_slices_str = "n_slices_" + str(i)
+            lr_str = "lr_" + str(i)
+            model_dict[n_slices_str] = models[i].n_slices
+            model_dict[model_str] = models[i].state_dict()
+            model_dict[lr_str] = optimizers[i].param_groups[0]["lr"]
+            model_dict[opt_str] = optimizers[i].state_dict()
+        PATH = os.path.join(self.result_folder,"models_optimizers.pt")
+
+        t.save(model_dict,PATH)
+        
+
+    def load_models_and_optimizers(self, PSF, lr)->tuple:
+
+        PATH = os.path.join(self.result_folder,"models_optimizers.pt")
+        checkpoint = t.load(PATH)
+        n_models = checkpoint["n_models"]
+        models, optimizers = list(), list()
+        
+        for i in range(0,n_models):
+            n_slices_str = "n_slices_" + str(i)
+            model_str = "model_" + str(i) +"_state_dict"
+            opt_str = "optimizer_" + str(i) + "_state_dict"
+            lr_str = "lr_" + str(i)
+
+            n_slices = checkpoint[n_slices_str]
+            model = custom_models.Volume_to_Slice(PSF, n_slices=n_slices, device=self.device, mode = self.mode, tio_mode = self.tio_mode)
+            model.load_state_dict(checkpoint[model_str])
+            model.train()
+            
+            #lr = checkpoint[lr_str]
+            optimizer = t.optim.Adam(model.parameters(), lr = lr)
+            optimizer.load_state_dict(checkpoint[opt_str])
+
+            models.append(model)
+            optimizers.append(optimizer)
+        
+        return models, optimizers
+
+
+
 """
                for name, param in model.named_parameters():
                 if param.requires_grad:

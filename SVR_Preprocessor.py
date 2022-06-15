@@ -57,7 +57,7 @@ class Preprocesser():
             save_intermediates (bool, optional):whether to save intermediate steps of preprocessing. Default to False.
 
         Returns:
-            tuple: initial fixed volume, pre registered stacks
+            tuple: initial fixed volume, pre registered stacks, slice_dimensions
         """
 
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
@@ -164,6 +164,7 @@ class Preprocesser():
             cropped_stack.stack.save(path_dst)
 
         return slice_dimensions
+
     def load_stacks(self, to_device=False)->list:
         """
         After cropping the initial images in low resolution are saved in their original coordinates
@@ -199,6 +200,7 @@ class Preprocesser():
                 stack_dict = to_device(stack_dict)
             stack_list.append(stack_dict)
         return stack_list
+        
 
     def denoising(self, stacks:list)->list:
         """Applies Gaussian Sharpen Filter to all stacks
