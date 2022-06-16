@@ -446,8 +446,8 @@ class SVR_optimizer():
             models.append(model_stack)
 
             #set kernel size to smaller shape of stack
-            #kernel_size = min(self.stacks[st]["image"].shape[1], self.stacks[st]["image"].shape[2])
-            kernel_size = 31
+            kernel_size = min(self.stacks[st]["image"].shape[1], self.stacks[st]["image"].shape[2])
+            #kernel_size = 31
             loss = loss_module.Loss_Volume_to_Slice(kernel_size, loss_fnc, self.device)
             losses.append(loss)
 
