@@ -11,7 +11,7 @@ results_multi_res/
 results_single_res/
 Computational_Graphs/
 tests/
-runs/
+runs_archive/
 preprocessing_gaussian/
 
 .DS_Store 
