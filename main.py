@@ -70,7 +70,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_15_voxelmorph_ncc_16_06_09_00"
+    result_string = "Ep_15_voxelmorph_ncc_16_06_10_00"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
@@ -84,7 +84,7 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 2
+    epochs = 12
     inner_epochs = 2
     lr = 0.01
     loss_fnc = "ncc"
