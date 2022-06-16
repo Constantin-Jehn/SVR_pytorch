@@ -102,7 +102,7 @@ class SVR_optimizer():
 
 
 
-    def optimize_volume_to_slice(self, epochs:int, inner_epochs:int, lr, PSF, lambda_scheduler, loss_fnc = "ncc", opt_alg = "Adam", tensorboard:bool = False, tensorboard_path = '', from_checkpoint:bool=False, last_rec_file:str=''):
+    def optimize_volume_to_slice(self, epochs:int, inner_epochs:int, lr, PSF, lambda_scheduler, loss_fnc = "ncc", opt_alg = "Adam", tensorboard:bool = False, tensorboard_path = '', from_checkpoint:bool=False, last_rec_file:str='', last_epoch:int=0):
         """
         optimizes transform of individual slices to mitigate motion artefact, uses initial 3d-3d registration
         implemented in SVR_Preprocessor
@@ -126,6 +126,7 @@ class SVR_optimizer():
             
         models, optimizers, losses, schedulers, affines_slices, n_slices, slices, slice_dims = self.prepare_optimization(PSF, lambda_scheduler, opt_alg, loss_fnc, lr)
         #loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
+        first_epoch = 0
         if from_checkpoint:
             models, optimizers = self.load_models_and_optimizers(PSF, lr)
             ###load fixed_image_tensor
@@ -142,6 +143,8 @@ class SVR_optimizer():
 
             self.fixed_image = fixed_image
 
+            first_epoch = last_epoch + 1
+
         fixed_image_tensor = self.fixed_image["image"]
         fixed_image_meta = self.fixed_image["image_meta_dict"]
         
@@ -149,7 +152,7 @@ class SVR_optimizer():
         tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio(self.fixed_image)
         resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
 
-        for epoch in range(0,epochs):
+        for epoch in range(first_epoch,first_epoch + epochs):
             common_volume = t.zeros_like(self.fixed_image["image"], device=self.device)
             #used to compare to absence of outlier removal
             common_volume_pure = t.zeros_like(self.fixed_image["image"], device=self.device)
@@ -497,7 +500,7 @@ class SVR_optimizer():
     def load_models_and_optimizers(self, PSF, lr)->tuple:
 
         PATH = os.path.join(self.result_folder,"models_optimizers.pt")
-        checkpoint = t.load(PATH)
+        checkpoint = t.load(PATH, map_location=self.device)
         n_models = checkpoint["n_models"]
         models, optimizers = list(), list()
         

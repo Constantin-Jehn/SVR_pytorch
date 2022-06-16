@@ -62,7 +62,7 @@ def optimize():
                 "21_3T_nody_001.nii.gz",
                 
                 "23_3T_nody_001.nii.gz"]
-
+    
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
     pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
@@ -84,7 +84,7 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 12
+    epochs = 8
     inner_epochs = 2
     lr = 0.01
     loss_fnc = "ncc"
@@ -100,11 +100,12 @@ def optimize():
     PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
     #PSF_alternative = monai.transforms.GaussianSmooth(sigma = [0.1,0.1,0.5])
 
-    from_checkpoint = False
-    last_rec_file = "reconstruction_volume_07.nii.gz"
+    from_checkpoint = True
+    last_rec_file = "reconstruction_volume_10.nii.gz"
+    last_epoch = 10
 
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, monai_mode = mode, tio_mode = tio_mode)
-    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensor_board_folder,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file)
+    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensor_board_folder,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
     
 if __name__ == '__main__':
     optimize()
