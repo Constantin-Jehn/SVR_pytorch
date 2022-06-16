@@ -47,7 +47,7 @@ class Preprocesser():
         self.tio_mode = tio_mode
         #self.writer = SummaryWriter("runs/test_session")
 
-    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False)->tuple:
+    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False)->tuple:
         """        
         preprocessing procedure before the optimization contains:
         denoising, normalization, initial 3d-3d registration
@@ -55,13 +55,14 @@ class Preprocesser():
         Args:
             init_pix_dim (tuple): initial resolution of the fixed image
             save_intermediates (bool, optional):whether to save intermediate steps of preprocessing. Default to False.
+            roi_only(bool,optional): whether to return only the region of interest, and set remaining voxels to zero
 
         Returns:
             tuple: initial fixed volume, pre registered stacks, slice_dimensions
         """
 
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        slice_dimensions = self.crop_images(upsampling=False)
+        slice_dimensions = self.crop_images(upsampling=False,roi_only=roi_only)
         # load cropped stacks
         stacks = self.load_stacks(to_device=True)
         # denoise stacks
@@ -108,7 +109,7 @@ class Preprocesser():
         stacks = self.load_stacks(to_device=True)
         return stacks
 
-    def crop_images(self, upsampling:bool=False, pixdim=0)->None:
+    def crop_images(self, upsampling:bool=False, pixdim=0, roi_only = False)->None:
         """
         crops images from source directory according to provided mask and saves them to prep folder
 
@@ -135,6 +136,13 @@ class Preprocesser():
 
             resampler = tio.transforms.Resample(stack)
             resampled_mask = resampler(deepcopy(mask))
+
+            #sets non masked values to zero
+            if roi_only:
+                stack_tensor = stack.tensor
+                stack_tensor[t.eq(resampled_mask.tensor,0)] = 0
+                stack.set_data(stack_tensor)
+              
             subject = tio.Subject(stack=stack, mask=resampled_mask)
 
             #find indices to crop image as tensor
@@ -147,6 +155,9 @@ class Preprocesser():
 
             cropper = tio.CropOrPad(list(roi_size), mask_name='mask')
 
+            
+
+            
             cropped_stack = cropper(subject)
 
             if upsampling:

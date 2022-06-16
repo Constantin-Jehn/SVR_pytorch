@@ -23,7 +23,7 @@ import SimpleITK as sitk
 from SVR_Evaluation import psnr
 
 class SVR_optimizer():
-    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, PSF, monai_mode:str, tio_mode:str)->None:
+    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, PSF, monai_mode:str, tio_mode:str, roi_only:bool=False)->None:
         """
         constructer of SVR_optimizer class
 
@@ -39,6 +39,7 @@ class SVR_optimizer():
             tio_mode (str): interpolation mode for monai resampling
             sav_gol_kernel_size(int): kernel support for Savitzky Golay Filter
             sav_gol_order(int): Polynomial order for interpolation of Savitzky Golay Filter
+            roi_only(bool,optional): whether to return only the region of interest, and set remaining voxels to zero
         """
         timer = time.time()
         
@@ -51,7 +52,7 @@ class SVR_optimizer():
         
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
-        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF)
+        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF,roi_only=roi_only)
         
         self.ground_truth = self.stacks
 
