@@ -65,12 +65,12 @@ def optimize():
     
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
-    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
+    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_15_voxelmorph_ncc_16_06_10_00"
+    result_string = "Ep_20_voxelmorph_ncc_16_06_14_00"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
@@ -84,7 +84,7 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 8
+    epochs = 20
     inner_epochs = 2
     lr = 0.01
     loss_fnc = "ncc"
@@ -100,7 +100,7 @@ def optimize():
     PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
     #PSF_alternative = monai.transforms.GaussianSmooth(sigma = [0.1,0.1,0.5])
 
-    from_checkpoint = True
+    from_checkpoint = False
     last_rec_file = "reconstruction_volume_10.nii.gz"
     last_epoch = 10
 
