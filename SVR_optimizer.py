@@ -220,7 +220,7 @@ class SVR_optimizer():
                         if param.requires_grad:
                             print (f'parameter {name} has only zero values: {t.all(param.data == 0)}')
                     """
-                writer.close()
+                
 
                 #update procedure
                 timer = time.time()
@@ -251,16 +251,22 @@ class SVR_optimizer():
                 
                 #update current stack from slices
                 common_volume = self.update_common_volume_from_slices(common_volume,transformed_slices, n_slices, st, local_stack["image_meta_dict"]["affine"], PSF, resampling_to_fixed_tio, fixed_image_meta)
+                #to compare outlier unremoved volume
+                """
                 common_volume_pure = self.update_common_volume_from_slices(common_volume,affine_transform_slices(local_slices, affines_tmp).detach(), n_slices, st, local_stack["image_meta_dict"]["affine"], PSF, resampling_to_fixed_tio, fixed_image_meta)
-
+                """
             
             if t.std(common_volume) != 0:
                 normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
                 common_volume = normalizer(common_volume)
+            
+            #to compare outlier unremoved volume
+            """
             if t.std(common_volume_pure) != 0:
                 normalizer = tv.transforms.Normalize(t.mean(common_volume_pure), t.std(common_volume_pure))
                 common_volume_pure = normalizer(common_volume_pure)
-            
+            """
+
             #update fixed_image
             timer = time.time()
             fixed_image_tensor = common_volume
@@ -271,7 +277,9 @@ class SVR_optimizer():
                 fixed_image = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(fixed_image_tensor, fixed_image_meta, epoch, upsample=upsample_bool, pix_dim = self.pixdims[epoch+1])
 
                 #benchmark without outlier removal
+                """
                 _ = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(common_volume_pure, fixed_image_meta, int('2' + str(epoch)), upsample=upsample_bool, pix_dim = self.pixdims[epoch+1])
+                """
                 fixed_image_tensor = fixed_image["image"]
                 fixed_image_meta = fixed_image["image_meta_dict"]
                 common_volume = t.zeros_like(fixed_image_tensor)
@@ -287,6 +295,8 @@ class SVR_optimizer():
                 scheduler.step()
             
             self.save_models_and_optimizers(models, optimizers)
+            
+        writer.close()
 
     def get_error_tensor(self,tr_fixed_images:t.tensor, local_slices:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
         """_summary_
