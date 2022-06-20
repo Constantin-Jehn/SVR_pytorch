@@ -103,7 +103,7 @@ class SVR_optimizer():
 
 
 
-    def optimize_volume_to_slice(self, epochs:int, inner_epochs:int, lr, PSF, lambda_scheduler, loss_fnc = "ncc", opt_alg = "Adam", tensorboard:bool = False, tensorboard_path = '', from_checkpoint:bool=False, last_rec_file:str='', last_epoch:int=0):
+    def optimize_volume_to_slice(self, epochs:int, inner_epochs:int, lr, PSF, lambda_scheduler, loss_fnc = "ncc", loss_kernel_size=31,  opt_alg = "Adam", tensorboard:bool = False, tensorboard_path = '', from_checkpoint:bool=False, last_rec_file:str='', last_epoch:int=0):
         """
         optimizes transform of individual slices to mitigate motion artefact, uses initial 3d-3d registration
         implemented in SVR_Preprocessor
@@ -115,6 +115,7 @@ class SVR_optimizer():
             PSF(functio): Point spread function
             lambda_scheduler(lambda-expression): controls learning rate schedule
             loss_fnc (str, optional): loss function Defaults to "ncc".
+            loss_kernel_size(int/str): kernel size either "max" for whole image or integer
             opt_alg (str, optional): optimization algorithm Defaults to "Adam"
             tensorboard(bool):whether or not to write to tensorboard
             from_checkpoint(bool):whether to start from checkpoint
@@ -125,7 +126,7 @@ class SVR_optimizer():
         affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
 
             
-        models, optimizers, losses, schedulers, affines_slices, n_slices, slices, slice_dims = self.prepare_optimization(PSF, lambda_scheduler, opt_alg, loss_fnc, lr)
+        models, optimizers, losses, schedulers, affines_slices, n_slices, slices, slice_dims = self.prepare_optimization(PSF, lambda_scheduler, opt_alg, loss_fnc, loss_kernel_size=loss_kernel_size, lr=0.01)
         #loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
         first_epoch = 0
         if from_checkpoint:
@@ -427,7 +428,7 @@ class SVR_optimizer():
                 common_volume = common_volume + common_stack
                 return common_volume
 
-    def prepare_optimization(self, PSF,lambda1, opt_alg, loss_fnc, lr):
+    def prepare_optimization(self, PSF,lambda1, opt_alg, loss_fnc, loss_kernel_size, lr):
         """
         Prepar optimization, generate slices, load models, optimizers and scheduler
 
@@ -436,6 +437,7 @@ class SVR_optimizer():
             lambda1 (lambda-expression):
             opt_alg (str): "Adam" or "SGD"
             loss_fnc (str): "ncc" or "mi"
+            loss_kernel_size(int/str): kernel size either "max" for whole image or integer
             lr (float): learning rate
 
         Returns:
@@ -460,8 +462,10 @@ class SVR_optimizer():
             models.append(model_stack)
 
             #set kernel size to smaller shape of stack
-            kernel_size = min(self.stacks[st]["image"].shape[1], self.stacks[st]["image"].shape[2])
-            #kernel_size = 31
+            if loss_kernel_size == "max":
+                kernel_size = min(self.stacks[st]["image"].shape[1], self.stacks[st]["image"].shape[2])
+            else:
+                kernel_size = loss_kernel_size
             loss = loss_module.Loss_Volume_to_Slice(kernel_size, loss_fnc, self.device)
             losses.append(loss)
 
