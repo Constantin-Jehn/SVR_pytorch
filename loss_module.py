@@ -9,15 +9,11 @@ class Loss_Volume_to_Volume(t.nn.Module):
     """
     class to calculate loss for initial 3d-3d registration
     """
-    def __init__(self, loss_fnc:str, device) -> None:
+    def __init__(self,  kernel_size, loss_fnc:str, device) -> None:
         super().__init__()
-        if loss_fnc == "ncc":
-            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=3, kernel_size=21)
-        elif loss_fnc == "mi":
-            self.monai_loss = monai.losses.GlobalMutualInformationLoss(reduction = "sum")
-        else:
-            assert("Please choose a valid loss function: either ncc or mi")
         self.device = device
+        self.kernel_size = kernel_size
+
     def forward(self, tr_fixed_tensor:t.tensor, stack_tensor:t.tensor)->t.tensor:
         """
         return loss between the two tensors
@@ -29,20 +25,15 @@ class Loss_Volume_to_Volume(t.nn.Module):
         Returns:
             t.tensor: loss tensor
         """
-        return self.monai_loss(tr_fixed_tensor,stack_tensor)
+        
+        #return self.monai_loss(tr_fixed_tensor,stack_tensor)
+        return ncc_loss(tr_fixed_tensor,stack_tensor, device = self.device, win = (self.kernel_size, self.kernel_size, self.kernel_size))
 
 class Loss_Volume_to_Slice(t.nn.Module):
     """class to calculate loss for 3d-2d registration
     """
     def __init__(self, kernel_size, loss_fnc:str,device):
         super(Loss_Volume_to_Slice,self).__init__()
-        if loss_fnc == "ncc":
-            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=2, kernel_size=kernel_size)
-            self.ncc_loss = ncc()
-        elif loss_fnc == "mi":
-            self.monai_loss = monai.losses.GlobalMutualInformationLoss(reduction = "sum")
-        else:
-            assert("Please choose a valid loss function: either ncc or mi")
         self.device = device
         self.kernel_size = kernel_size
 

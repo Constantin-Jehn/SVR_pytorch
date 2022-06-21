@@ -23,7 +23,9 @@ import SimpleITK as sitk
 from SVR_Evaluation import psnr
 
 class SVR_optimizer():
-    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, PSF, monai_mode:str, tio_mode:str, roi_only:bool=False)->None:
+    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, PSF, loss_kernel_size, monai_mode:str, tio_mode:str, roi_only:bool=False)->None:
+        timer = time.time()
+
         """
         constructer of SVR_optimizer class
 
@@ -35,13 +37,15 @@ class SVR_optimizer():
             mask_filename (str): nifti filename to crop input images
             pixdims (list): ist of pixdims with increasing resolution
             device (str): _description_
+            PSF(function): point spread function
+            loss_kernel_size(int/str): kernel size for loss function (max/int)
             monai_mode (str): interpolation mode for monai resampling
             tio_mode (str): interpolation mode for monai resampling
             sav_gol_kernel_size(int): kernel support for Savitzky Golay Filter
             sav_gol_order(int): Polynomial order for interpolation of Savitzky Golay Filter
             roi_only(bool,optional): whether to return only the region of interest, and set remaining voxels to zero
         """
-        timer = time.time()
+        
         
         self.device = device
         print(f'Program runs on: {self.device}')
@@ -49,10 +53,12 @@ class SVR_optimizer():
         self.k = len(self.stack_filenames)
         self.mode = monai_mode
         self.pixdims = pixdims
+
+        self.loss_kernel_size = loss_kernel_size
         
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
-        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF,roi_only=roi_only)
+        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF, loss_kernel_size, roi_only=roi_only)
         
         self.ground_truth = self.stacks
 
@@ -125,7 +131,7 @@ class SVR_optimizer():
         affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
 
             
-        models, optimizers, losses, schedulers, affines_slices, n_slices, slices, slice_dims = self.prepare_optimization(PSF, lambda_scheduler, opt_alg, loss_fnc, lr)
+        models, optimizers, losses, schedulers, affines_slices, n_slices, slices, slice_dims = self.prepare_optimization(PSF, self.loss_kernel_size, lambda_scheduler, opt_alg, loss_fnc, lr)
         #loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
         first_epoch = 0
         if from_checkpoint:
@@ -156,7 +162,7 @@ class SVR_optimizer():
         for epoch in range(first_epoch,first_epoch + epochs):
             common_volume = t.zeros_like(self.fixed_image["image"], device=self.device)
             #used to compare to absence of outlier removal
-            common_volume_pure = t.zeros_like(self.fixed_image["image"], device=self.device)
+            
             tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio({"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta})
             resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
             print(f'\n\n Epoch: {epoch}')
@@ -427,13 +433,14 @@ class SVR_optimizer():
                 common_volume = common_volume + common_stack
                 return common_volume
 
-    def prepare_optimization(self, PSF,lambda1, opt_alg, loss_fnc, lr):
+    def prepare_optimization(self, PSF, loss_kernel_size, lambda1, opt_alg, loss_fnc, lr):
         """
         Prepar optimization, generate slices, load models, optimizers and scheduler
 
         Args:
-            PSF (_type_): 
-            lambda1 (lambda-expression):
+            PSF (_type_): Point spread function
+            loss_kernel_size(int/str): kernel size of local ncc loss
+            lambda1 (lambda-expression): rules the learning rate schedule
             opt_alg (str): "Adam" or "SGD"
             loss_fnc (str): "ncc" or "mi"
             lr (float): learning rate
@@ -460,8 +467,11 @@ class SVR_optimizer():
             models.append(model_stack)
 
             #set kernel size to smaller shape of stack
-            #kernel_size = min(self.stacks[st]["image"].shape[1], self.stacks[st]["image"].shape[2])
-            kernel_size = 31
+            if loss_kernel_size == "max":
+                kernel_size = min(self.stacks[st]["image"].shape[1], self.stacks[st]["image"].shape[2])
+            else:
+                kernel_size = loss_kernel_size
+
             loss = loss_module.Loss_Volume_to_Slice(kernel_size, loss_fnc, self.device)
             losses.append(loss)
 
@@ -534,6 +544,7 @@ class SVR_optimizer():
             optimizers.append(optimizer)
         
         return models, optimizers
+
 
 
 
