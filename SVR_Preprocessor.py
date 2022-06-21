@@ -296,6 +296,7 @@ class Preprocesser():
             stack_meta = stacks[st]["image_meta_dict"]
 
             model = custom_models.Volume_to_Volume(PSF, device=self.device)
+            loss_kernel_size = 9
             loss = loss_module.Loss_Volume_to_Volume(loss_kernel_size, "ncc", self.device)
             optimizer = t.optim.Adam(model.parameters(), lr=0.001)
 
