@@ -68,12 +68,13 @@ def optimize():
     
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
-    pixdims = [(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0, 1.0, 1.0),(1.0,1.0,1.0),(1.0,1.0,1.0),(1.0,1.0,1.0)]
+    pixdims_float = [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
+    pixdims_tuples = [(x,x,x) for x in pixdims_float]
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_20_voxelmorph_ncc_16_06_15_00"
+    result_string = "Ep_20_voxelmorph_ncc_21_06_10_00"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
@@ -87,7 +88,7 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 20
+    epochs = 15
     inner_epochs = 2
     lr = 0.01
     loss_fnc = "ncc"
@@ -95,8 +96,10 @@ def optimize():
     sav_gol_kernel_size = 13
     sav_gol_order = 4
 
+    loss_kernel_size = 31
+
     #lambda function for setting learning rate
-    lambda1 = lambda epoch: [1,0.5,0.25,0.25,0.25][epoch] if epoch  < 5  else 0.2 if epoch < 10 else 0.08
+    lambda1 = lambda epoch: [1,0.5,0.25,0.25,0.25][epoch] if epoch  < 5  else 0.2 if epoch < 10 else 0.125
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
 
@@ -106,10 +109,10 @@ def optimize():
     from_checkpoint = False
     last_rec_file = "reconstruction_volume_10.nii.gz"
     last_epoch = 10
-    roi_only = True
+    roi_only = False
 
-    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only)
-    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensor_board_folder,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
+    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims_tuples, device, PSF, loss_kernel_size=loss_kernel_size, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only)
+    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, loss_kernel_size=loss_kernel_size, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensor_board_folder,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
     
 if __name__ == '__main__':
     optimize()
