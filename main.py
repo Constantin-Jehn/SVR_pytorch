@@ -65,7 +65,7 @@ def optimize():
     PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
     #PSF_alternative = monai.transforms.GaussianSmooth(sigma = [0.1,0.1,0.5])
 
-    loss_kernel_size = 9
+    loss_kernel_size = 31
 
     from_checkpoint = False
     last_rec_file = "reconstruction_volume_10.nii.gz"
