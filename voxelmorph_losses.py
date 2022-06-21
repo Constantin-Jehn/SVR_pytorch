@@ -73,7 +73,7 @@ def ncc_loss(I, J, device = 'cpu', win=None):
     
     I_var, J_var, cross = compute_local_sums(I, J, sum_filt, stride, padding, win, ndims)
 
-    cc = cross*cross / (I_var*J_var + 1e-5)
+    cc = cross*cross / (I_var*J_var + 1e-3)
 
     return -1 * torch.mean(cc)
 
