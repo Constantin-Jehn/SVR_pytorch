@@ -8,6 +8,9 @@ from SVR_optimizer import SVR_optimizer
 from SVR_Preprocessor import Preprocesser
 import errno
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
+
 
 def preprocess():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
