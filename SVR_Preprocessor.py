@@ -47,7 +47,7 @@ class Preprocesser():
         self.tio_mode = tio_mode
         #self.writer = SummaryWriter("runs/test_session")
 
-    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False)->tuple:
+    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, loss_kernel_size, save_intermediates:bool=False, roi_only:bool = False)->tuple:
         """        
         preprocessing procedure before the optimization contains:
         denoising, normalization, initial 3d-3d registration
@@ -58,7 +58,7 @@ class Preprocesser():
             roi_only(bool,optional): whether to return only the region of interest, and set remaining voxels to zero
 
         Returns:
-            tuple: initial fixed volume, pre registered stacks, slice_dimensions
+            tuple: initial fixed volume, preprocessed stacks, slice_dimensions
         """
 
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
@@ -81,21 +81,21 @@ class Preprocesser():
         if save_intermediates:
             stacks = self.save_stacks(stacks, 'norm')
 
-        stacks = self.resample_stacks(stacks, init_pix_dim)
+        stacks_resampled = self.resample_stacks(stacks, init_pix_dim)
 
-        fixed_image, stacks = self.create_common_volume_registration(stacks, PSF)
+        fixed_image, stacks_transformed = self.create_common_volume_registration(stacks_resampled, PSF, loss_kernel_size)
 
         #stacks = self.outlier_removal(fixed_image, stacks)
 
         fixed_image = self.resample_fixed_image(fixed_image, init_pix_dim)
 
         if save_intermediates:
-            stacks = self.save_stacks(stacks, 'reg')
+            stacks_transformed = self.save_stacks(stacks_transformed, 'reg')
 
         for st in range(0, len(stacks)):
-            stacks[st]["image"] = stacks[st]["image"].squeeze().unsqueeze(0)
+            stacks_transformed[st]["image"] = stacks_transformed[st]["image"].squeeze().unsqueeze(0)
 
-        return fixed_image, stacks, slice_dimensions
+        return fixed_image, stacks_resampled, slice_dimensions
 
     def get_cropped_stacks(self)->list:
         """
@@ -264,7 +264,7 @@ class Preprocesser():
         return stacks
 
 
-    def create_common_volume_registration(self, stacks:list, PSF)->tuple:
+    def create_common_volume_registration(self, stacks:list, PSF, loss_kernel_size)->tuple:
         """
         creates common volume and return registered stacks
         Args:
@@ -292,7 +292,7 @@ class Preprocesser():
             stack_meta = stacks[st]["image_meta_dict"]
 
             model = custom_models.Volume_to_Volume(PSF, device=self.device)
-            loss = loss_module.Loss_Volume_to_Volume("ncc", self.device)
+            loss = loss_module.Loss_Volume_to_Volume(loss_kernel_size, "ncc", self.device)
             optimizer = t.optim.Adam(model.parameters(), lr=0.001)
 
             fixed_image_resampled_tensor = self.resample_fixed_image_to_local_stack(common_tensor,fixed_meta["affine"],stack_tensor,stack_meta["affine"])

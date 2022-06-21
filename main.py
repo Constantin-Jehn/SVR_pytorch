@@ -65,7 +65,7 @@ def optimize():
     
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
-    pixdims_float = [2.0,2.0,1.7,1.7,1.5,1.5,1.3,1.3,1.1,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
+    pixdims_float = [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
     pixdims_tuples = [(x,x,x) for x in pixdims_float]
 
     src_folder = "sample_data"
@@ -106,9 +106,9 @@ def optimize():
     from_checkpoint = False
     last_rec_file = "reconstruction_volume_10.nii.gz"
     last_epoch = 10
-    roi_only = True
+    roi_only = False
 
-    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims_tuples, device, PSF, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only)
+    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims_tuples, device, PSF, loss_kernel_size=loss_kernel_size, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only)
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, loss_kernel_size=loss_kernel_size, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensor_board_folder,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
     
 if __name__ == '__main__':

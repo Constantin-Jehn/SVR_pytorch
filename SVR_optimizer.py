@@ -23,7 +23,7 @@ import SimpleITK as sitk
 from SVR_Evaluation import psnr
 
 class SVR_optimizer():
-    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, PSF, monai_mode:str, tio_mode:str, roi_only:bool=False)->None:
+    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, PSF, loss_kernel_size, monai_mode:str, tio_mode:str, roi_only:bool=False)->None:
         """
         constructer of SVR_optimizer class
 
@@ -52,7 +52,8 @@ class SVR_optimizer():
         
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
-        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF,roi_only=roi_only)
+        #!! self.stacks now resampled to pixdim but not transformed
+        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF, loss_kernel_size, roi_only=roi_only)
         
         self.ground_truth = self.stacks
 
@@ -126,7 +127,7 @@ class SVR_optimizer():
         affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
 
             
-        models, optimizers, losses, schedulers, affines_slices, n_slices, slices, slice_dims = self.prepare_optimization(PSF, lambda_scheduler, opt_alg, loss_fnc, loss_kernel_size=loss_kernel_size, lr=0.01)
+        models, optimizers, losses, schedulers, affines_slices, n_slices, slices, slice_dims = self.prepare_optimization(PSF, lambda_scheduler, opt_alg, loss_fnc, loss_kernel_size=loss_kernel_size, lr=lr)
         #loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
         first_epoch = 0
         if from_checkpoint:
@@ -157,10 +158,11 @@ class SVR_optimizer():
         for epoch in range(first_epoch,first_epoch + epochs):
             common_volume = t.zeros_like(self.fixed_image["image"], device=self.device)
             #used to compare to absence of outlier removal
-            common_volume_pure = t.zeros_like(self.fixed_image["image"], device=self.device)
+            #common_volume_pure = t.zeros_like(self.fixed_image["image"], device=self.device)
             tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio({"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta})
             resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
             print(f'\n\n Epoch: {epoch}')
+
             
             for st in range (0, self.k):
                 print(f"\n  stack: {st}")
@@ -275,7 +277,7 @@ class SVR_optimizer():
 
             if epoch < epochs - 1:
                 #not last epoch yet --> upsample fixed_image if wanted
-                upsample_bool = (self.pixdims[epoch + 1] == self.pixdims[epoch])
+                upsample_bool = (self.pixdims[epoch + 1] != self.pixdims[epoch])
                 fixed_image = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(fixed_image_tensor, fixed_image_meta, epoch, upsample=upsample_bool, pix_dim = self.pixdims[epoch+1])
 
                 #benchmark without outlier removal
@@ -457,6 +459,7 @@ class SVR_optimizer():
             slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
             slices.append(slice_tmp)
             n_slices.append(n_slice)
+
             model_stack = custom_models.Volume_to_Slice(PSF, n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode)
             model_stack.to(self.device)
             models.append(model_stack)

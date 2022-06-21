@@ -54,19 +54,22 @@ def ncc_loss(I, J, device = 'cpu', win=None):
     J2 = J*J
     IJ = I*J
 
-    sum_filt = torch.ones([1, 1, *win]).to(device)
+    
 
     pad_no = math.floor(win[0]/2)
 
     if ndims == 1:
         stride = (1)
         padding = (pad_no)
+        sum_filt = torch.ones([1, *win]).to(device)
     elif ndims == 2:
         stride = (1,1)
         padding = (pad_no, pad_no)
+        sum_filt = torch.ones([1, 1, *win]).to(device)
     else:
         stride = (1,1,1)
         padding = (pad_no, pad_no, pad_no)
+        sum_filt = torch.ones([1, 1,1, *win]).to(device)
     
     I_var, J_var, cross = compute_local_sums(I, J, sum_filt, stride, padding, win, ndims)
 
