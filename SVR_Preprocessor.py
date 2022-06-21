@@ -60,7 +60,7 @@ class Preprocesser():
             roi_only(bool,optional): whether to return only the region of interest, and set remaining voxels to zero
 
         Returns:
-            tuple: initial fixed volume, pre registered stacks, slice_dimensions
+            tuple: initial fixed volume, pre processed stacks, slice_dimensions
         """
 
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
@@ -83,9 +83,9 @@ class Preprocesser():
         if save_intermediates:
             stacks = self.save_stacks(stacks, 'norm')
 
-        stacks = self.resample_stacks(stacks, init_pix_dim)
+        stacks_preprocessed = self.resample_stacks(stacks, init_pix_dim)
 
-        fixed_image, stacks = self.create_common_volume_registration(stacks, PSF, loss_kernel_size)
+        fixed_image, stacks = self.create_common_volume_registration(stacks_preprocessed, PSF, loss_kernel_size)
 
         #stacks = self.outlier_removal(fixed_image, stacks)
 
@@ -97,7 +97,7 @@ class Preprocesser():
         for st in range(0, len(stacks)):
             stacks[st]["image"] = stacks[st]["image"].squeeze().unsqueeze(0)
 
-        return fixed_image, stacks, slice_dimensions
+        return fixed_image, stacks_preprocessed, slice_dimensions
 
     def get_cropped_stacks(self)->list:
         """

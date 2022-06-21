@@ -35,7 +35,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_20_voxelmorph_ncc_21_06_14_30"
+    result_string = "Ep_20_voxelmorph_ncc_21_06_15_00"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
