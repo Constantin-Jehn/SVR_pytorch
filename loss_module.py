@@ -9,7 +9,7 @@ class Loss_Volume_to_Volume(t.nn.Module):
     """
     class to calculate loss for initial 3d-3d registration
     """
-    def __init__(self,  kernel_size, loss_fnc:str, device) -> None:
+    def __init__(self, loss_fnc:str, device) -> None:
         super().__init__()
         if loss_fnc == "ncc":
             self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=3, kernel_size=21)

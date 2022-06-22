@@ -47,7 +47,7 @@ class Preprocesser():
         self.tio_mode = tio_mode
         #self.writer = SummaryWriter("runs/test_session")
 
-    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, loss_kernel_size, save_intermediates:bool=False, roi_only:bool = False)->tuple:
+    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False)->tuple:
         """        
         preprocessing procedure before the optimization contains:
         denoising, normalization, initial 3d-3d registration
@@ -85,7 +85,7 @@ class Preprocesser():
 
         stacks_preprocessed = self.resample_stacks(stacks, init_pix_dim)
 
-        fixed_image, stacks = self.create_common_volume_registration(stacks_preprocessed, PSF, loss_kernel_size)
+        fixed_image, stacks = self.create_common_volume_registration(stacks_preprocessed, PSF)
 
         #stacks = self.outlier_removal(fixed_image, stacks)
 
@@ -266,13 +266,13 @@ class Preprocesser():
         return stacks
 
 
-    def create_common_volume_registration(self, stacks:list, PSF, loss_kernel_size)->tuple:
+    def create_common_volume_registration(self, stacks:list, PSF)->tuple:
         """
         creates common volume and return registered stacks
         Args:
             stacks (list): initial stacks
             PSF(functio): point spread function
-            loss_kernel_size(int/str):
+            
         Returns:
             tuple: inital fixed image, list of preregistered stacks
         """
@@ -296,14 +296,13 @@ class Preprocesser():
             stack_meta = stacks[st]["image_meta_dict"]
 
             model = custom_models.Volume_to_Volume(PSF, device=self.device)
-            loss_kernel_size = 9
-            loss = loss_module.Loss_Volume_to_Volume(loss_kernel_size, "ncc", self.device)
-            optimizer = t.optim.Adam(model.parameters(), lr=0.001)
+            loss = loss_module.Loss_Volume_to_Volume("ncc", self.device)
+            optimizer = t.optim.Adam(model.parameters(), lr=0.0035)
 
             fixed_image_resampled_tensor = self.resample_fixed_image_to_local_stack(common_tensor,fixed_meta["affine"],stack_tensor,stack_meta["affine"])
             
             stack_tensor = stacks[st]["image"].unsqueeze(0)
-            for ep in range(0, 15):
+            for ep in range(0, 18):
                 transformed_fixed_tensor, affine_tmp = model(fixed_image_resampled_tensor)
                 transformed_fixed_tensor = transformed_fixed_tensor.to(self.device)
                 loss_tensor = loss(transformed_fixed_tensor,stack_tensor)
@@ -487,7 +486,7 @@ class Preprocesser():
 
     def resample_fixed_image(self, fixed_image:dict, pix_dim:tuple)->dict:
         """
-        Can be used to resample fixed image without saving it
+        Can be used to resample fixed image and saving it as initial image (-1)
 
         Args:
             fixed_image (dict): monai dict

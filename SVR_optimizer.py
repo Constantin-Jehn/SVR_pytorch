@@ -58,7 +58,7 @@ class SVR_optimizer():
         
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
-        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF, loss_kernel_size, roi_only=roi_only)
+        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF, roi_only=roi_only)
         
         self.ground_truth = self.stacks
 

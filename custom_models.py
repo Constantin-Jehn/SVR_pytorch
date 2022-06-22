@@ -1,3 +1,4 @@
+from black import transform_line
 import torch as t
 import monai
 from monai.transforms import (
@@ -29,6 +30,15 @@ class Volume_to_Volume(t.nn.Module):
         self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(1)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
         self.PSF = PSF
+
+    def get_parameters(self):
+        """
+        Return the tensors of rotation and translation parameters as Euler angles
+
+        Returns:
+            tuple: 
+        """
+        return self.rotations[0].data, self.translations[0].data
 
     
     def forward(self, fixed_volume_resampled_tensor:t.tensor)->tuple:
@@ -92,17 +102,27 @@ class Volume_to_Slice(t.nn.Module):
     class to perform 3d-2d registration, aligns the fixed image to a slice by "inv_affines",
     affine can be used later to resample the slice to the fixed image
     """
-    def __init__(self, PSF, n_slices:int, device, mode = "bilinear", tio_mode = "welch"):
+    def __init__(self, PSF, n_slices:int, device, mode = "bilinear", tio_mode = "welch",rot_params = None, trans_params = None):
         super().__init__()
         
         self.device = device
         self.n_slices = n_slices
-        self.rotations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
-        self.translations = t.nn.ParameterList([t.nn.Parameter(t.zeros(3, device = self.device)) for i in range(n_slices)])
         self.affine_layer = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
         self.PSF = PSF
         self.mode = mode
         self.tio_mode = tio_mode
+        self.initialize_parameters(rot_params,trans_params)
+    
+    def initialize_parameters(self, rot_params, trans_params ):
+        if rot_params == None:
+            rot_params = t.zeros(3,device = self.device)
+        elif trans_params == None:
+            trans_params = t.zeros(3, device=self.device)
+
+        self.rotations = t.nn.ParameterList([t.nn.Parameter(rot_params) for i in range(self.n_slices)])
+        self.translations = t.nn.ParameterList([t.nn.Parameter(trans_params) for i in range(self.n_slices)])
+        
+
 
     def forward(self, fixed_image_resampled_tensor:t.tensor)->tuple:
         """
