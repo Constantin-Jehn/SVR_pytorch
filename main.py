@@ -51,7 +51,7 @@ def optimize():
     
     epochs = 15
     inner_epochs = 2
-    lr = 0.01
+    lr = 0.001
     loss_fnc = "ncc"
     opt_alg = "Adam"
     sav_gol_kernel_size = 13
@@ -65,7 +65,7 @@ def optimize():
     PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
     #PSF_alternative = monai.transforms.GaussianSmooth(sigma = [0.1,0.1,0.5])
 
-    loss_kernel_size = 31
+    loss_kernel_size = 15
 
     from_checkpoint = False
     last_rec_file = "reconstruction_volume_10.nii.gz"
