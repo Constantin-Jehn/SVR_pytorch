@@ -1,4 +1,3 @@
-from black import transform_line
 import torch as t
 import monai
 from monai.transforms import (
@@ -116,7 +115,7 @@ class Volume_to_Slice(t.nn.Module):
     def initialize_parameters(self, rot_params, trans_params ):
         if rot_params == None:
             rot_params = t.zeros(3,device = self.device)
-        elif trans_params == None:
+        if trans_params == None:
             trans_params = t.zeros(3, device=self.device)
 
         self.rotations = t.nn.ParameterList([t.nn.Parameter(rot_params) for i in range(self.n_slices)])
