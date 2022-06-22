@@ -58,7 +58,7 @@ class SVR_optimizer():
         
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
-        self.fixed_image, self.stacks, self.slice_dimensions = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF, roi_only=roi_only)
+        self.fixed_image, self.stacks, self.slice_dimensions, self.rot_params_init, self.trans_params_init = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF, roi_only=roi_only)
         
         self.ground_truth = self.stacks
 
@@ -462,7 +462,7 @@ class SVR_optimizer():
             slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
             slices.append(slice_tmp)
             n_slices.append(n_slice)
-            model_stack = custom_models.Volume_to_Slice(PSF, n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode)
+            model_stack = custom_models.Volume_to_Slice(PSF, n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode, rot_params=self.rot_params_init[st], trans_params= self.trans_params_init[st])
             model_stack.to(self.device)
             models.append(model_stack)
 

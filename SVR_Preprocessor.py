@@ -85,7 +85,7 @@ class Preprocesser():
 
         stacks_preprocessed = self.resample_stacks(stacks, init_pix_dim)
 
-        fixed_image, stacks = self.create_common_volume_registration(stacks_preprocessed, PSF)
+        fixed_image, stacks, rot_params, trans_params = self.create_common_volume_registration(stacks_preprocessed, PSF)
 
         #stacks = self.outlier_removal(fixed_image, stacks)
 
@@ -97,7 +97,7 @@ class Preprocesser():
         for st in range(0, len(stacks)):
             stacks[st]["image"] = stacks[st]["image"].squeeze().unsqueeze(0)
 
-        return fixed_image, stacks_preprocessed, slice_dimensions
+        return fixed_image, stacks_preprocessed, slice_dimensions, rot_params, trans_params
 
     def get_cropped_stacks(self)->list:
         """
@@ -157,9 +157,6 @@ class Preprocesser():
 
             cropper = tio.CropOrPad(list(roi_size), mask_name='mask')
 
-            
-
-            
             cropped_stack = cropper(subject)
 
             if upsampling:
@@ -291,6 +288,10 @@ class Preprocesser():
         tio_common_image = self.monai_to_torchio(stacks[0])
         resample_to_common = tio.transforms.Resample(tio_common_image, image_interpolation=self.tio_mode)
 
+        rot_params, trans_params = list(), list()
+        rot_params.append(t.zeros(3,device=self.device))
+        trans_params.append(t.zeros(3,device=self.device))
+
         for st in range(1, self.k):
             stack_tensor = stacks[st]["image"]
             stack_meta = stacks[st]["image_meta_dict"]
@@ -328,13 +329,18 @@ class Preprocesser():
 
             stacks[st] = self.update_monai_from_tio(tio_stack,stacks[st],stacks[st]["image_meta_dict"]["filename_or_obj"])
 
+            rot_params_tmp, trans_params_tmp = model.get_parameters()
+
+            rot_params.append(rot_params_tmp)
+            trans_params.append(trans_params_tmp)
+
             common_tensor = common_tensor + stacks[st]["image"]
 
         normalizer = tv.transforms.Normalize(t.mean(common_tensor), t.std(common_tensor))
         common_tensor = normalizer(common_tensor)
         #common_tensor = t.div(common_tensor, t.max(common_tensor)/2047)
 
-        return {"image": common_tensor.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta}, stacks
+        return {"image": common_tensor.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta}, stacks, rot_params, trans_params
 
     def outlier_removal(self, transformed_fixed_tensor:t.tensor, stack:dict):
         """
