@@ -20,7 +20,8 @@ def optimize():
 
     """
     filenames = ["14_3T_nody_001.nii.gz",
-            "10_3T_nody_001.nii.gz",
+    
+                "10_3T_nody_001.nii.gz",
                 
                 "21_3T_nody_001.nii.gz",
                 
