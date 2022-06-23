@@ -20,7 +20,7 @@ def optimize():
 
     """
     filenames = ["14_3T_nody_001.nii.gz",
-    
+
                 "10_3T_nody_001.nii.gz",
                 
                 "21_3T_nody_001.nii.gz",
@@ -35,7 +35,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_20_prereg_23_06_20_00"
+    result_string = "Ep_20_prereg_23_06_20_40"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
