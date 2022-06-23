@@ -83,7 +83,7 @@ class SVR_optimizer():
         stack = add_channel(stack)
         stack_image = stack["image"]
 
-        n_slices =  min(list(stack_image.shape[2:]))
+        n_slices =  stack_image.shape[2+slice_dim]
         
         slices = t.zeros_like(stack_image).repeat(n_slices,1,1,1,1)
         
@@ -154,6 +154,11 @@ class SVR_optimizer():
 
         fixed_image_tensor = self.fixed_image["image"]
         fixed_image_meta = self.fixed_image["image_meta_dict"]
+
+        fake_epoch = int (str(0) + str(3))
+        self.svr_preprocessor.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,fake_epoch)
+
+
         
         #use this template for tio-resampling operations of stacks during update
         tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio(self.fixed_image)
