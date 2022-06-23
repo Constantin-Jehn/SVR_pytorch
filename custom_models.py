@@ -42,7 +42,7 @@ class Volume_to_Volume(t.nn.Module):
     
     def forward(self, fixed_volume_resampled_tensor:t.tensor)->tuple:
         """
-        fixed_volume tensor is transformed by current roation and translation parameters of the model (to be precise the inverse of their affine)
+        fixed_volume tensor is transformed by current rotation and translation parameters of the model (to be precise the inverse of their affine)
         the actual affine is returned to align the stack to the fixed image outside this module
         Args:
             fixed_volume_tensor (t.tensor): common volume registration target

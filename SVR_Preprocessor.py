@@ -60,7 +60,12 @@ class Preprocesser():
             roi_only(bool,optional): whether to return only the region of interest, and set remaining voxels to zero
 
         Returns:
-            tuple: initial fixed volume, pre processed stacks, slice_dimensions
+            tuple: 
+                initial fixed volume(monai dict), 
+                pre processed stacks(list of monai dicts),
+                slice_dimensions (list)
+                rot_params (list): inital rotation parameters of pre registration
+                trans_params(list): initial translation parameters of pre registration
         """
 
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
@@ -89,6 +94,7 @@ class Preprocesser():
 
         #stacks = self.outlier_removal(fixed_image, stacks)
 
+        
         fixed_image = self.resample_fixed_image(fixed_image, init_pix_dim)
 
         if save_intermediates:
@@ -271,7 +277,7 @@ class Preprocesser():
             PSF(functio): point spread function
             
         Returns:
-            tuple: inital fixed image, list of preregistered stacks
+            tuple: inital fixed image, list of preregistered stacks, list of Rotation parameters of preregistration, list of translation parameters of preregistration
         """
 
         folder = "preprocessing"
@@ -289,6 +295,7 @@ class Preprocesser():
         resample_to_common = tio.transforms.Resample(tio_common_image, image_interpolation=self.tio_mode)
 
         rot_params, trans_params = list(), list()
+        #adds zeros for inital stack (used as template)
         rot_params.append(t.zeros(3,device=self.device))
         trans_params.append(t.zeros(3,device=self.device))
 
