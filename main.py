@@ -35,7 +35,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_20_prereg_23_06_14_40"
+    result_string = "Ep_20_prereg_23_06_15_20"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
@@ -58,7 +58,7 @@ def optimize():
     sav_gol_order = 4
 
     #lambda function for setting learning rate
-    lambda1 = lambda epoch: [0.8,0.5,0.25,0.25,0.25][epoch] if epoch  < 5  else 0.2 if epoch < 10 else 0.125
+    lambda1 = lambda epoch: [0.5,0.5,0.25,0.25,0.25][epoch] if epoch  < 5  else 0.2 if epoch < 10 else 0.125
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
 
