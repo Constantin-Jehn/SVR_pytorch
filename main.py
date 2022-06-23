@@ -34,7 +34,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_20_prereg_23_06_15_40"
+    result_string = "Ep_20_prereg_23_06_19_50"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     

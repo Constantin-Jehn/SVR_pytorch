@@ -462,7 +462,9 @@ class SVR_optimizer():
             slice_tmp, n_slice = self.construct_slices_from_stack(self.stacks[st], slice_dims[st])
             slices.append(slice_tmp)
             n_slices.append(n_slice)
-            model_stack = custom_models.Volume_to_Slice(PSF, n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode, rot_params=self.rot_params_init[st], trans_params= self.trans_params_init[st])
+            #model_stack = custom_models.Volume_to_Slice(PSF, n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode, rot_params=self.rot_params_init[st], trans_params= self.trans_params_init[st])
+            #change for test
+            model_stack = custom_models.Volume_to_Slice(PSF, n_slices=n_slices[st], device=self.device, mode = self.mode, tio_mode = self.tio_mode, rot_params=None, trans_params= None)
             model_stack.to(self.device)
             models.append(model_stack)
 
