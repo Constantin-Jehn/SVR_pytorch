@@ -20,6 +20,7 @@ def optimize():
 
     """
     filenames = ["14_3T_nody_001.nii.gz",
+            "10_3T_nody_001.nii.gz",
                 
                 "21_3T_nody_001.nii.gz",
                 
@@ -33,7 +34,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_20_prereg_23_06_15_30"
+    result_string = "Ep_20_prereg_23_06_15_40"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
@@ -47,7 +48,7 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 5
+    epochs = 3
     inner_epochs = 2
     lr = 0.001
     loss_fnc = "ncc"
