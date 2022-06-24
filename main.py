@@ -35,7 +35,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_5_prereg_24_06_13_35"
+    result_string = "Ep_5_prereg_24_06_13_40"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
@@ -51,7 +51,7 @@ def optimize():
     
     epochs = 5
     inner_epochs = 2
-    lr = 0.001
+    lr = 0.0005
     loss_fnc = "ncc"
     opt_alg = "Adam"
     sav_gol_kernel_size = 13
@@ -65,7 +65,7 @@ def optimize():
     PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
     #PSF_alternative = monai.transforms.GaussianSmooth(sigma = [0.1,0.1,0.5])
 
-    loss_kernel_size = 15
+    loss_kernel_size = 9
 
     from_checkpoint = False
     last_rec_file = "reconstruction_volume_10.nii.gz"
