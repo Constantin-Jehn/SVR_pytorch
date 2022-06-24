@@ -41,11 +41,13 @@ class Preprocesser():
         self.src_folder = src_folder
         self.prep_folder = prep_folder
         self.result_folder = result_folder
-        self.stack_filenames = stack_filenames
-        self.k = len(self.stack_filenames)
+        
+        self.k = len(stack_filenames)
         self.mask_filename = mask_filename
         self.mode = monai_mode
         self.tio_mode = tio_mode
+
+        self.stack_filenames = self.order_stackfilenames_for_preregistration(stack_filenames)
         #self.writer = SummaryWriter("runs/test_session")
 
     def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False)->tuple:
@@ -426,5 +428,62 @@ class Preprocesser():
             stacks[st]["image"] = normalizer(st_tensor)
         return stacks
 
+    def order_stackfilenames_for_preregistration(self, stack_filenames:list)->list:
+        """
+        return ordered list of stack filenames, with respect to motion corruptions in each stack
 
- 
+        Args:
+            stack_filenames (list):
+
+        Returns:
+            list: ordered list of filenames
+        """
+        beta = 0.1
+
+        within_stack_errors = t.zeros(self.k)
+        iterations = list()
+        for st in range(0,self.k):
+            filename = stack_filenames[st]
+            path_stack = os.path.join(self.src_folder, filename)
+            stack = tio.ScalarImage(path_stack)
+            within_stack_error, r = self.within_stack_error(stack.data,beta)
+            within_stack_errors[st] = within_stack_error
+            iterations.append(r)
+        
+        _, indices_tensor = t.sort(within_stack_errors)
+
+        #order filenames according to found order
+        stack_filenames_ordered = [stack_filenames[i] for i in indices_tensor.tolist()]
+
+        return stack_filenames_ordered
+
+    def within_stack_error(self, img_tensor:t.tensor, beta:int)-> float:
+        """Calculates surrogate measure for within stack error caused by motion artefact
+        Method from Kainz 2015 eq (2) and eq(3)
+
+        Args:
+            img_tensor (t.tensor): data tensor of stac
+            beta (int): error_threshold (hyperparameter)
+
+        Returns:
+            float: relativ error measure
+        """
+
+        img_tensor = img_tensor.squeeze()
+        #assumes third dimension to be slice dimension --> flattens the first two dims into 1D vector
+        #D: observed data matrix
+        D = t.flatten(img_tensor,0,1)
+
+        U,S,V = t.svd(D)
+        S = t.diag(S)
+        error = beta + 1
+        r=0
+        while error > beta:
+            U_prime = U[:,:r]
+            S_prime = S[:r,:r]
+            V_prime_t = V[:,:r].transpose(0,1)
+            D_prime = t.matmul(t.matmul(U_prime, S_prime),V_prime_t)
+            #error measure in equation (2)
+            error = t.norm(D-D_prime, p='fro') / t.norm(D, p='fro')
+            r +=1
+        return (r*error).item(), r

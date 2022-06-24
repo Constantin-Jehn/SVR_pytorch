@@ -13,7 +13,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="1"
     
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-    
+    """
     filenames = ["10_3T_nody_001.nii.gz",
                 
                 "14_3T_nody_001.nii.gz"]
@@ -26,7 +26,7 @@ def optimize():
                 "21_3T_nody_001.nii.gz",
                 
                 "23_3T_nody_001.nii.gz"]
-   """
+   
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
     pixdims_float = [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
@@ -35,7 +35,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_20_prereg_23_06_22_00"
+    result_string = "Ep_20_prereg_24_06_13_15"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
