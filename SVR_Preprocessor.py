@@ -106,7 +106,7 @@ class Preprocesser():
         for st in range(0, len(stacks)):
             stacks[st]["image"] = stacks[st]["image"].squeeze().unsqueeze(0)
 
-        return fixed_image, stacks_preprocessed, slice_dimensions, rot_params, trans_params
+        return fixed_image, stacks, slice_dimensions, rot_params, trans_params
 
     def get_cropped_stacks(self)->list:
         """
