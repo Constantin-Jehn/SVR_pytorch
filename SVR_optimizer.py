@@ -22,6 +22,8 @@ import SimpleITK as sitk
 
 from SVR_Evaluation import psnr
 
+import utils
+
 class SVR_optimizer():
     def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, PSF, loss_kernel_size, monai_mode:str, tio_mode:str, roi_only:bool=False)->None:
         timer = time.time()
@@ -156,19 +158,19 @@ class SVR_optimizer():
         fixed_image_meta = self.fixed_image["image_meta_dict"]
 
         fake_epoch = int (str(0) + str(3))
-        self.svr_preprocessor.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,fake_epoch)
+        utils.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,fake_epoch, self.result_folder,self.mode)
 
 
         
         #use this template for tio-resampling operations of stacks during update
-        tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio(self.fixed_image)
+        tio_fixed_image_template = utils.monai_to_torchio(self.fixed_image)
         resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
 
         for epoch in range(first_epoch,first_epoch + epochs):
             common_volume = t.zeros_like(self.fixed_image["image"], device=self.device)
             #used to compare to absence of outlier removal
             
-            tio_fixed_image_template = self.svr_preprocessor.monai_to_torchio({"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta})
+            tio_fixed_image_template = utils.monai_to_torchio({"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta})
             resampling_to_fixed_tio = tio.transforms.Resample(tio_fixed_image_template, image_interpolation=self.tio_mode)
             print(f'\n\n Epoch: {epoch}')
             
@@ -183,10 +185,10 @@ class SVR_optimizer():
                 local_stack = self.stacks[st]
                 local_slices = slices[st]
 
-                local_stack_tio = self.svr_preprocessor.monai_to_torchio(local_stack)
+                local_stack_tio = utils.monai_to_torchio(local_stack)
 
-                fixed_image_resampled_tensor = self.svr_preprocessor.resample_fixed_image_to_local_stack(fixed_image_tensor, fixed_image_meta["affine"], local_stack_tio.tensor,
-                                                                                            local_stack_tio.affine)
+                fixed_image_resampled_tensor = utils.resample_fixed_image_to_local_stack(fixed_image_tensor, fixed_image_meta["affine"], local_stack_tio.tensor,
+                                                                                            local_stack_tio.affine, self.tio_mode, self.device)
                 
                 if st == 0:
                     print(f'learning rate: {optimizer.param_groups[0]["lr"]}')
@@ -265,8 +267,10 @@ class SVR_optimizer():
                 common_volume = self.update_common_volume_from_slices(common_volume,transformed_slices, n_slices, st, local_stack["image_meta_dict"]["affine"], PSF, resampling_to_fixed_tio, fixed_image_meta)
                 
                 #save each intermediate vol for debugging
+                """
                 fake_epoch = int (str(epoch) + str(st))
-                self.svr_preprocessor.save_intermediate_reconstruction(common_volume,fixed_image_meta,fake_epoch)
+                utils.save_intermediate_reconstruction(common_volume,fixed_image_meta,fake_epoch,self.result_folder,self.mode)
+                """
                 
                 #to compare outlier unremoved volume
                 """
@@ -291,7 +295,7 @@ class SVR_optimizer():
             if epoch < epochs - 1:
                 #not last epoch yet --> upsample fixed_image if wanted
                 upsample_bool = (self.pixdims[epoch + 1] == self.pixdims[epoch])
-                fixed_image = self.svr_preprocessor.save_intermediate_reconstruction_and_upsample(fixed_image_tensor, fixed_image_meta, epoch, upsample=upsample_bool, pix_dim = self.pixdims[epoch+1])
+                fixed_image = utils.save_intermediate_reconstruction_and_upsample(fixed_image_tensor, fixed_image_meta, epoch, self.result_folder, self.mode, self.tio_mode, upsample=upsample_bool, pix_dim = self.pixdims[epoch+1])
 
                 #benchmark without outlier removal
                 """
@@ -302,7 +306,7 @@ class SVR_optimizer():
                 fixed_image_meta = fixed_image["image_meta_dict"]
                 common_volume = t.zeros_like(fixed_image_tensor)
             else:
-                self.svr_preprocessor.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,epoch)
+                utils.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,epoch,self.result_folder,self.mode)
             print(f'fixed_volume update:  {time.time() - timer} s ')
 
             fixed_dict = {"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta}

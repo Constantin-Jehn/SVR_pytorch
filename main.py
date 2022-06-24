@@ -13,7 +13,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="1"
     
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-    """
+    
     filenames = ["10_3T_nody_001.nii.gz",
                 
                 "14_3T_nody_001.nii.gz"]
@@ -26,7 +26,7 @@ def optimize():
                 "21_3T_nody_001.nii.gz",
                 
                 "23_3T_nody_001.nii.gz"]
-   
+   """
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
     pixdims_float = [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
