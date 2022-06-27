@@ -277,10 +277,16 @@ class SVR_optimizer():
                 common_volume_pure = self.update_common_volume_from_slices(common_volume,affine_transform_slices(local_slices, affines_tmp).detach(), n_slices, st, local_stack["image_meta_dict"]["affine"], PSF, resampling_to_fixed_tio, fixed_image_meta)
                 """
             
+            """
             if t.std(common_volume) != 0:
                 normalizer = tv.transforms.Normalize(t.mean(common_volume), t.std(common_volume))
                 common_volume = normalizer(common_volume)
-            
+            """
+
+            #normalize between 0 and 1
+            common_volume = common_volume - t.amin(common_volume)
+            common_volume = common_volume / t.amax(common_volume)
+
             #to compare outlier unremoved volume
             """
             if t.std(common_volume_pure) != 0:
@@ -432,10 +438,18 @@ class SVR_optimizer():
                     slice_tmp_tio = tio.Image(tensor=slice_tmp.squeeze().unsqueeze(0).detach().cpu(), affine=local_stack_affine)
                     slice_tio_transformed = resampler(slice_tmp_tio)
 
+                    #avoid nan values
+                    padded_tensor = t.nan_to_num(slice_tmp_tio.tensor, nan=0)
+                    slice_tmp_tio.set_data(padded_tensor)
+
                     #Gaussian kernel over each slice
                     #tio_transformed_blurred = self.gaussian_smoother(slice_tio_transformed.tensor)
                     #Use golay filter as PSF
                     tio_transformed_blurred = PSF(slice_tio_transformed.tensor)
+
+                    #normalize
+                    tio_transformed_blurred = tio_transformed_blurred - t.amin(tio_transformed_blurred)
+                    tio_transformed_blurred = tio_transformed_blurred / t.amax(tio_transformed_blurred)
 
                     common_stack = common_stack + tio_transformed_blurred.unsqueeze(0).to(self.device)
                     #common_stack = common_stack + tio_transformed.tensor.unsqueeze(0).to(self.device)    

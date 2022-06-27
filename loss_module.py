@@ -5,6 +5,8 @@ import monai
 import torch as t
 
 from voxelmorph_losses import ncc_loss
+
+
 class Loss_Volume_to_Volume(t.nn.Module):
     """
     class to calculate loss for initial 3d-3d registration

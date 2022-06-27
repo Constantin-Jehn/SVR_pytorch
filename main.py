@@ -7,8 +7,9 @@ from copy import deepcopy
 from SVR_optimizer import SVR_optimizer
 from SVR_Preprocessor import Preprocesser
 import errno
-import os  # see issue #152
+import os
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["taskset"] = "21-40"
 
     
 def optimize():
@@ -35,7 +36,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_5_prereg_24_06_13_40"
+    result_string = "Ep_5_prereg_27_06_10_10"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     

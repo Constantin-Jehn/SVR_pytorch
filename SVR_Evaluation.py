@@ -17,13 +17,15 @@ def psnr(fixed_image:dict, stacks:list, n_slices:int, tio_mode:str)->float128:
         stack_tio = utils.monai_to_torchio(stacks[st])
         resampler = tio.Resample(stack_tio, image_interpolation=tio_mode)
         fixed_resampled = resampler(fixed_tio)
-        max_val, min_val = t.max(t.max(fixed_resampled.tensor),t.max(stack_tio.tensor)), t.min(t.min(fixed_resampled.tensor),t.min(stack_tio.tensor))
-        max_val = max_val - min_val
-        psnr_metric = monai.metrics.PSNRMetric(max_val = max_val, reduction = 'mean')
+
+        psnr_metric = monai.metrics.PSNRMetric(max_val = 1, reduction = 'none')
 
         for sl in range(0,n_slices[st]):
             pred, target = fixed_resampled.tensor[0,:,:,sl], stack_tio.tensor[0,:,:,sl]
-            psnr+=psnr_metric(pred,target)
+            psnr_raw_res = psnr_metric(pred,target)
+            finite_entries =  t.isfinite(psnr_raw_res)
+            psnr_clean = t.sum(psnr_raw_res[finite_entries]) / t.sum(finite_entries)
+            psnr+=psnr_clean
     
     return t.mean(t.div(psnr,n_slices_total))
 
