@@ -33,7 +33,12 @@ class Outlier_Removal_Voxels(t.nn.Module):
         Returns:
             t.tensor: output of Gaussian 
         """
+
+        if variance < 1e-5:
+            variance = t.tensor(1e-5,device=variance.device)
+
         factor = t.div(1,t.sqrt(variance * 2 * t.pi))
+
         argument = t.div((e - self.mu), t.sqrt(variance))
         exponential = t.exp(-0.5 * t.pow((argument),2) )
         return factor * exponential
@@ -128,6 +133,9 @@ class Outlier_Removal_Slices_cste(t.nn.Module):
         Returns:
             t.tensor: output of Gaussian 
         """
+        if variance < 1e-5:
+            variance = t.tensor(1e-5,device=variance.device)
+
         factor = t.div(1,t.sqrt(variance * 2 * t.pi))
         argument = t.div((red_voxel_prob - mu), t.sqrt(variance))
         exponential = t.exp(-0.5 * t.pow((argument),2) )

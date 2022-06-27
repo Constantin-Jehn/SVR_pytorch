@@ -36,7 +36,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_5_prereg_27_06_10_10"
+    result_string = "Ep_5_prereg_27_06_14_40"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
@@ -52,7 +52,7 @@ def optimize():
     
     epochs = 5
     inner_epochs = 2
-    lr = 0.0005
+    lr = 0.001
     loss_fnc = "ncc"
     opt_alg = "Adam"
     sav_gol_kernel_size = 13

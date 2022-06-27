@@ -449,12 +449,14 @@ class SVR_optimizer():
 
                     #normalize
                     tio_transformed_blurred = tio_transformed_blurred - t.amin(tio_transformed_blurred)
-                    tio_transformed_blurred = tio_transformed_blurred / t.amax(tio_transformed_blurred)
+                    if t.amax(tio_transformed_blurred) > 1e-5:
+                        tio_transformed_blurred = tio_transformed_blurred / t.amax(tio_transformed_blurred)
 
                     common_stack = common_stack + tio_transformed_blurred.unsqueeze(0).to(self.device)
                     #common_stack = common_stack + tio_transformed.tensor.unsqueeze(0).to(self.device)    
 
                 #PSNR output
+                common_stack = t.nan_to_num(common_stack, nan=0)
                 fixed_dict = {"image": common_stack, "image_meta_dict": fixed_image_meta}
                 print(f'PSNR: {psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)}')
 
