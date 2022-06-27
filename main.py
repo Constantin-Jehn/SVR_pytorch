@@ -59,7 +59,7 @@ def optimize():
     sav_gol_order = 4
 
     #lambda function for setting learning rate
-    lambda1 = lambda epoch: [1,1,1,1,1][epoch] if epoch  < 5  else 0.7 if epoch < 10 else 0.5
+    lambda1 = lambda epoch: [0.8,1,1.3,1.5,1.8,2][epoch] if epoch  < 5  else 1.5  if epoch < 10 else 1
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
 
