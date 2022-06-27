@@ -36,7 +36,7 @@ def optimize():
     src_folder = "sample_data"
     prep_folder = "cropped_images"
     src_folder = "sample_data"
-    result_string = "Ep_5_prereg_27_06_16:15"
+    result_string = "Ep_5_prereg_27_06_16_30"
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
@@ -50,7 +50,7 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 5
+    epochs = 15
     inner_epochs = 2
     lr = 0.0003
     loss_fnc = "ncc"
@@ -59,7 +59,7 @@ def optimize():
     sav_gol_order = 4
 
     #lambda function for setting learning rate
-    lambda1 = lambda epoch: [1,1,1,1,1][epoch] if epoch  < 5  else 0.2 if epoch < 10 else 0.125
+    lambda1 = lambda epoch: [1,1,1,1,1][epoch] if epoch  < 5  else 0.7 if epoch < 10 else 0.5
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
 
