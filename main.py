@@ -8,6 +8,7 @@ from SVR_optimizer import SVR_optimizer
 from SVR_Preprocessor import Preprocesser
 import errno
 import os
+import datetime
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
 os.environ["taskset"] = "21-40"
 
@@ -33,20 +34,6 @@ def optimize():
     pixdims_float = [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
     pixdims = [(x,x,x) for x in pixdims_float]
 
-    src_folder = "sample_data"
-    prep_folder = "cropped_images"
-    src_folder = "sample_data"
-    result_string = "Ep_5_prereg_27_06_17_30"
-    result_folder = os.path.join("results", result_string)
-    tensor_board_folder = os.path.join("runs", result_string)
-    
-    try:
-        os.mkdir(result_folder)
-    except OSError as exc:
-        if exc.errno != errno.EEXIST:
-            raise
-        pass
-
     mode = "bicubic"
     tio_mode = "welch"
     
@@ -57,6 +44,24 @@ def optimize():
     opt_alg = "Adam"
     sav_gol_kernel_size = 13
     sav_gol_order = 4
+
+    src_folder = "sample_data"
+    prep_folder = "cropped_images"
+    src_folder = "sample_data"
+
+    current_date = datetime.datetime.now()
+    result_string = "Ep_" + str(epochs) + "_" + "reg_" + str(current_date.day) + "_" + str(current_date.month) + "_" + str(current_date.hour) + "_"  + str(current_date.minute)
+    result_folder = os.path.join("results", result_string)
+    tensor_board_folder = os.path.join("runs", result_string)
+    
+    try:
+        os.mkdir(result_folder)
+    except OSError as exc:
+        if exc.errno != errno.EEXIST:
+            raise
+        pass
+
+    
 
     #lambda function for setting learning rate
     lambda1 = lambda epoch: [0.2,0.5,1,1.5,1.8,2][epoch] if epoch  < 5  else 1.5  if epoch < 10 else 1

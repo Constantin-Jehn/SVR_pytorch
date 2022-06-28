@@ -284,8 +284,7 @@ class SVR_optimizer():
             """
 
             #normalize between 0 and 1
-            common_volume = common_volume - t.amin(common_volume)
-            common_volume = common_volume / t.amax(common_volume)
+            common_volume = utils.normalize_zero_to_one(common_volume)
 
             #to compare outlier unremoved volume
             """
@@ -448,9 +447,7 @@ class SVR_optimizer():
                     tio_transformed_blurred = PSF(slice_tio_transformed.tensor)
 
                     #normalize
-                    tio_transformed_blurred = tio_transformed_blurred - t.amin(tio_transformed_blurred)
-                    if t.amax(tio_transformed_blurred) > 1e-5:
-                        tio_transformed_blurred = tio_transformed_blurred / t.amax(tio_transformed_blurred)
+                    tio_transformed_blurred = utils.normalize_zero_to_one(tio_transformed_blurred)
 
                     common_stack = common_stack + tio_transformed_blurred.unsqueeze(0).to(self.device)
                     #common_stack = common_stack + tio_transformed.tensor.unsqueeze(0).to(self.device)    

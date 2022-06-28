@@ -346,8 +346,9 @@ class Preprocesser():
 
             common_tensor = common_tensor + stacks[st]["image"]
 
-        normalizer = tv.transforms.Normalize(t.mean(common_tensor), t.std(common_tensor))
-        common_tensor = normalizer(common_tensor)
+        common_tensor = utils.normalize_zero_to_one(common_tensor)
+        #normalizer = tv.transforms.Normalize(t.mean(common_tensor), t.std(common_tensor))
+        #common_tensor = normalizer(common_tensor)
         #common_tensor = t.div(common_tensor, t.max(common_tensor)/2047)
 
         return {"image": common_tensor.squeeze().unsqueeze(0).unsqueeze(0), "image_meta_dict": fixed_meta}, stacks, rot_params, trans_params
