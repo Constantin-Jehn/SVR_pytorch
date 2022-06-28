@@ -207,3 +207,11 @@ def resample_fixed_image_to_local_stack(fixed_image_tensor:t.tensor, fixed_image
     fixed_tio = resampler_tio(fixed_tio)
     fixed_image_tensor = fixed_tio.tensor.to(device)
     return fixed_image_tensor
+
+def normalize_zero_to_one(tensor:t.tensor)->t.tensor:
+    tensor = tensor - t.amin(tensor)
+    if t.amax(tensor) > 1e-5:
+        tensor = tensor / t.amax(tensor)
+    return tensor
+
+
