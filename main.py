@@ -31,14 +31,15 @@ def optimize():
    
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
-    pixdims_float = [3.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
+    pixdims_float = [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
+
     pixdims = [(x,x,x) for x in pixdims_float]
 
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 2
-    inner_epochs = 1
+    epochs = 10
+    inner_epochs = 2
     
     loss_fnc = "ncc"
     opt_alg = "Adam"
@@ -64,7 +65,7 @@ def optimize():
     
     lr = 0.0015
     #lambda function for setting learning rate
-    lambda1 = lambda epoch: [0.1,0.3,0.5,0.8,1,1][epoch] if epoch  < 5  else 1
+    lambda1 = lambda epoch: [0.1,0.3,0.5,0.8,1,1][epoch] if epoch  < 5  else 0.7
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
 
