@@ -31,14 +31,14 @@ def optimize():
    
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
-    pixdims_float = [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
+    pixdims_float = [3.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
     pixdims = [(x,x,x) for x in pixdims_float]
 
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 15
-    inner_epochs = 2
+    epochs = 2
+    inner_epochs = 1
     
     loss_fnc = "ncc"
     opt_alg = "Adam"
