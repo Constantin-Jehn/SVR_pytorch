@@ -28,7 +28,7 @@ def psnr(fixed_image:dict, stacks:list, n_slices:int, tio_mode:str)->float128:
         
 
         for sl in range(0,n_slices[st]):
-            pred, target = fixed_resampled.tensor[0,:,:,sl], stack_tio.tensor[0,:,:,sl]
+            pred, target = fixed_resampled.tensor[0,:,:,sl], utils.normalize_zero_to_one(stack_tio.tensor[0,:,:,sl])
             psnr_tmp = psnr_metric(pred,target)
             """
             finite_entries =  t.isfinite(psnr_raw_res)

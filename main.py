@@ -38,7 +38,7 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 10
+    epochs = 5
     inner_epochs = 2
     
     loss_fnc = "ncc"
