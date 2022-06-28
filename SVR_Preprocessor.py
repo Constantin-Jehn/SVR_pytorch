@@ -302,6 +302,8 @@ class Preprocesser():
         rot_params.append(t.zeros(3,device=self.device))
         trans_params.append(t.zeros(3,device=self.device))
 
+        stacks[0]["image"] = utils.normalize_zero_to_one(stacks[0]["image"])
+
         for st in range(1, self.k):
             stack_tensor = stacks[st]["image"]
             stack_meta = stacks[st]["image_meta_dict"]
@@ -345,6 +347,8 @@ class Preprocesser():
             trans_params.append(trans_params_tmp)
 
             common_tensor = common_tensor + stacks[st]["image"]
+
+            stacks[st]["image"] = utils.normalize_zero_to_one(stacks[st]["image"])
 
         common_tensor = utils.normalize_zero_to_one(common_tensor)
         #normalizer = tv.transforms.Normalize(t.mean(common_tensor), t.std(common_tensor))

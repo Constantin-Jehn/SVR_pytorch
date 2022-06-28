@@ -128,7 +128,13 @@ class SVR_optimizer():
             from_checkpoint(bool):whether to start from checkpoint
             last_rec_file(string): if starting from checkpoint name of last reconstruction file to start from
         """
+        #tensorboard writer
         writer = SummaryWriter(tensorboard_path)
+
+        #numpy array to store learning rates, losses,and psnr values for each epoch 
+        # columnes lr, losses (as many as stacks), psnr
+        documentation_array = np.zeros((epochs, 2+ self.k))
+
         #Afffine transformations for updating common volume from slices (use bilinear because it's 2d transform)
         affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
 
@@ -163,8 +169,6 @@ class SVR_optimizer():
 
         fake_epoch = int (str(0) + str(3))
         utils.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,fake_epoch, self.result_folder,self.mode)
-
-
         
         #use this template for tio-resampling operations of stacks during update
         tio_fixed_image_template = utils.monai_to_torchio(self.fixed_image)
@@ -292,6 +296,8 @@ class SVR_optimizer():
             #normalize between 0 and 1
             common_volume = utils.normalize_zero_to_one(common_volume)
 
+
+
             #to compare outlier unremoved volume
             """
             if t.std(common_volume_pure) != 0:
@@ -320,8 +326,11 @@ class SVR_optimizer():
                 utils.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,epoch,self.result_folder,self.mode)
             print(f'fixed_volume update:  {time.time() - timer} s ')
 
+
             fixed_dict = {"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta}
-            print(f'PSNR: {psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)}')
+            psnr_value = psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)
+            writer.add_scalar(f"PSNR", psnr_value, epoch)
+            documentation_array[epoch,-1] = psnr_value
 
             psnr_value = psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)
             writer.add_scalar(f"PSNR", psnr_value, epoch)
@@ -470,8 +479,6 @@ class SVR_optimizer():
 
                 #PSNR output
                 common_stack = t.nan_to_num(common_stack, nan=0)
-                fixed_dict = {"image": common_stack, "image_meta_dict": fixed_image_meta}
-                print(f'PSNR: {psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)}')
 
                 #update common volume from stack
                 common_volume = common_volume + common_stack
