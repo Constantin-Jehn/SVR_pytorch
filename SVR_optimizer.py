@@ -132,6 +132,10 @@ class SVR_optimizer():
         #Afffine transformations for updating common volume from slices (use bilinear because it's 2d transform)
         affine_transform_slices = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
 
+        #numpy array to store learning rates, losses,and psnr values for each epoch 
+        # columnes lr, losses (as many as stacks), psnr
+        documentation_array = np.zeros((epochs, 2+ self.k))
+
             
         models, optimizers, losses, schedulers, affines_slices, n_slices, slices, slice_dims = self.prepare_optimization(PSF, self.loss_kernel_size, lambda_scheduler, opt_alg, loss_fnc, lr)
         #loss = loss_module.Loss_Volume_to_Slice(loss_fnc, self.device)
@@ -223,9 +227,11 @@ class SVR_optimizer():
                     #calcuates 2d between a local slice and the corresponding slice in the tr_fixed_image
                         if st == 0:
                             writer.add_scalar(f"Learning_rate", optimizer.param_groups[0]["lr"], epoch)
+                            documentation_array[epoch,0] = optimizer.param_groups[0]["lr"]
 
                         if inner_epoch == 0:
                             writer.add_scalar(f"Loss_stack_{st}", loss_tensor.item(), epoch)
+                            documentation_array[epoch,st + 1] = loss_tensor.item()
 
 
                     """
@@ -317,12 +323,22 @@ class SVR_optimizer():
             fixed_dict = {"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta}
             print(f'PSNR: {psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)}')
 
+            psnr_value = psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)
+            writer.add_scalar(f"PSNR", psnr_value, epoch)
+            documentation_array[epoch,-1] = psnr_value
+
             for st in range(0, self.k):
                 scheduler = schedulers[st]
                 scheduler.step()
             
             self.save_models_and_optimizers(models, optimizers)
-            
+        
+        fname = os.path.join(self.result_folder, 'results.csv')
+        header = 'lr'
+        for i in range(0,self.k):
+            header = header + ',loss_stack_' + str(i)
+        header = header + ',PSNR'
+        np.savetxt(fname,documentation_array, delimiter=',', header= header)
         writer.close()
 
     def get_error_tensor(self,tr_fixed_images:t.tensor, local_slices:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
