@@ -69,8 +69,8 @@ def optimize():
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
 
-    PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
-    #PSF_alternative = monai.transforms.GaussianSmooth(sigma = [0.1,0.1,0.5])
+    #PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
+    PSF= monai.transforms.GaussianSmooth(sigma = [1.2 * (1/2.35), 1.2 * (1/2.35), (1/2.35)])
 
     loss_kernel_size = 31
 
