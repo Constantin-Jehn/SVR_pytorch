@@ -310,7 +310,7 @@ class Preprocesser():
 
             model = custom_models.Volume_to_Volume(PSF, device=self.device)
             loss = loss_module.Loss_Volume_to_Volume("ncc", self.device)
-            optimizer = t.optim.Adam(model.parameters(), lr=0.0035)
+            optimizer = t.optim.Adam(model.parameters(), lr=0.001)
 
             fixed_image_resampled_tensor = utils.resample_fixed_image_to_local_stack(common_tensor,fixed_meta["affine"],stack_tensor,stack_meta["affine"],self.tio_mode,self.device)
             
