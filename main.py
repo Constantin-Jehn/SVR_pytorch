@@ -9,6 +9,7 @@ from SVR_Preprocessor import Preprocesser
 import errno
 import os
 import datetime
+import json
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
 os.environ["taskset"] = "21-40"
 
@@ -38,13 +39,12 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 10
+    epochs = 8
     inner_epochs = 2
     
     loss_fnc = "ncc"
     opt_alg = "Adam"
-    sav_gol_kernel_size = 13
-    sav_gol_order = 4
+
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
@@ -69,15 +69,47 @@ def optimize():
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
 
-    #PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
-    PSF= monai.networks.layers.GaussianFilter(spatial_dims = 3, sigma = [1.2 * (1/2.35), 1.2 * (1/2.35), (1/2.35)])
+    sav_gol_kernel_size = 13
+    sav_gol_order = 4
+    psf_string = "Sav_Gol"
+
+    if psf_string == "Sav_Gol":
+        PSF = monai.networks.layers.SavitzkyGolayFilter(sav_gol_kernel_size,sav_gol_order,axis=3,mode="zeros")
+        PSF_doc = {"name": psf_string, "kernel_size": sav_gol_kernel_size, "order": sav_gol_order}
+    elif psf_string == "Gaussian":
+        sigma_gauss = [1.2 * (1/2.35), 1.2 * (1/2.35), (1/2.35)]
+        PSF= monai.networks.layers.GaussianFilter(spatial_dims = 3, sigma = sigma_gauss)
+        PSF_doc = {"name": psf_string, "sigma": sigma_gauss}
+    else:
+        assert('Choose Sav_Gol or Gaussian as PSF')
 
     loss_kernel_size = 31
 
     from_checkpoint = False
     last_rec_file = "reconstruction_volume_10.nii.gz"
     last_epoch = 10
-    roi_only = False
+    roi_only = True
+
+    parameter_file = {
+        "Result_folder": result_folder,
+        "Interpolation": {
+            "monai_interpolation_mode": mode,
+            "tochio_interpolation_mode": tio_mode
+            },
+        "Opimization":{
+            "Epochs": epochs,
+            "Inner_epochs": inner_epochs,
+            "Loss_fnc": loss_fnc,
+            "Loss_kernel_size": loss_kernel_size,
+            "Optimisation_algorithm": opt_alg,
+            "Learning_rate": lr,
+            },
+        "PSF": PSF_doc
+    }
+    parameter_file_dest = os.path.join(result_folder,"parameters.json")
+    out_file = open(parameter_file_dest, "w")
+    json.dump(parameter_file,out_file, indent=6)
+    out_file.close()
 
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, loss_kernel_size, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only)
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensor_board_folder,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
