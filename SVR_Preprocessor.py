@@ -50,7 +50,7 @@ class Preprocesser():
         self.stack_filenames = self.order_stackfilenames_for_preregistration(stack_filenames)
         #self.writer = SummaryWriter("runs/test_session")
 
-    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False)->tuple:
+    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False, lr_vol_vol:float = 0.0035)->tuple:
         """        
         preprocessing procedure before the optimization contains:
         denoising, normalization, initial 3d-3d registration
@@ -61,6 +61,7 @@ class Preprocesser():
             loss_kernel_size(int/str): kernel size of local norm. cc
             save_intermediates (bool, optional):whether to save intermediate steps of preprocessing. Default to False.
             roi_only(bool,optional): whether to return only the region of interest, and set remaining voxels to zero
+            lr_vol_vol(float): learning rate for volume-volume pregistration
 
         Returns:
             tuple: 
@@ -93,7 +94,7 @@ class Preprocesser():
 
         stacks_preprocessed = utils.resample_stacks(stacks, init_pix_dim, self.tio_mode)
 
-        fixed_image, stacks, rot_params, trans_params = self.create_common_volume_registration(stacks_preprocessed, PSF)
+        fixed_image, stacks, rot_params, trans_params = self.create_common_volume_registration(stacks_preprocessed, PSF, lr_vol_vol)
 
         #stacks = self.outlier_removal(fixed_image, stacks)
 
@@ -272,7 +273,7 @@ class Preprocesser():
         return stacks
 
 
-    def create_common_volume_registration(self, stacks:list, PSF)->tuple:
+    def create_common_volume_registration(self, stacks:list, PSF, lr_vol_vol)->tuple:
         """
         creates common volume and return registered stacks
         Args:
@@ -310,7 +311,7 @@ class Preprocesser():
 
             model = custom_models.Volume_to_Volume(PSF, device=self.device)
             loss = loss_module.Loss_Volume_to_Volume("ncc", self.device)
-            optimizer = t.optim.Adam(model.parameters(), lr=0.001)
+            optimizer = t.optim.Adam(model.parameters(), lr=lr_vol_vol)
 
             fixed_image_resampled_tensor = utils.resample_fixed_image_to_local_stack(common_tensor,fixed_meta["affine"],stack_tensor,stack_meta["affine"],self.tio_mode,self.device)
             

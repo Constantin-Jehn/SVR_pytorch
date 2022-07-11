@@ -51,7 +51,7 @@ def optimize():
     src_folder = "sample_data"
 
     current_date = datetime.datetime.now()
-    result_string = "Ep_" + str(epochs) + "_" + "reg_" + str(current_date.day) + "_" + str(current_date.month) + "_" + str(current_date.hour) + "_"  + str(current_date.minute)
+    result_string =  "Rec_" +  str(current_date.month) + "_" + str(current_date.day) + "_" + str(current_date.hour) + "_"  + str(current_date.minute) +"_Ep_" + str(epochs)
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
@@ -63,7 +63,11 @@ def optimize():
         pass
 
     #prev 0.0015
-    lr = 0.0003
+    #lr for 2D/3D registratoin
+    lr = 0.0015
+    
+    #lr for volume to volume registration
+    lr_vol_vol = 0.0035
     #lambda function for setting learning rate
     lambda1 = lambda epoch: [0.1,0.3,0.5,0.8,1,1][epoch] if epoch  < 5  else 1
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
@@ -88,7 +92,7 @@ def optimize():
     from_checkpoint = False
     last_rec_file = "reconstruction_volume_10.nii.gz"
     last_epoch = 10
-    roi_only = True
+    roi_only = False
 
     parameter_file = {
         "Result_folder": result_folder,
@@ -102,7 +106,8 @@ def optimize():
             "Loss_fnc": loss_fnc,
             "Loss_kernel_size": loss_kernel_size,
             "Optimisation_algorithm": opt_alg,
-            "Learning_rate": lr,
+            "Learning_rate_SVR": lr,
+            "Learning_rate_prereg": lr_vol_vol
             },
         "PSF": PSF_doc
     }
@@ -111,7 +116,7 @@ def optimize():
     json.dump(parameter_file,out_file, indent=6)
     out_file.close()
 
-    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, loss_kernel_size, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only)
+    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, loss_kernel_size, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only, lr_vol_vol=lr_vol_vol)
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensor_board_folder,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
     
 if __name__ == '__main__':
