@@ -42,6 +42,7 @@ class Preprocesser():
         self.prep_folder = prep_folder
         self.result_folder = result_folder
         
+        self.k = len(stack_filenames)
         
         self.mask_filename = mask_filename
         self.mode = monai_mode
@@ -50,6 +51,7 @@ class Preprocesser():
         #orders stack filenames according to motion corruption
         #selects four stacks with least corruptions
         self.stack_filenames = self.order_stackfilenames_for_preregistration(stack_filenames)
+        self.k = len(self.stack_filenames)
         #self.writer = SummaryWriter("runs/test_session")
 
     def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False, lr_vol_vol:float = 0.0035)->tuple:
@@ -75,7 +77,7 @@ class Preprocesser():
         """
 
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        slice_dimensions = self.crop_images(upsampling=True,roi_only=roi_only)
+        slice_dimensions = self.crop_images(upsampling=False,roi_only=roi_only)
 
         # load cropped stacks
         stacks = self.load_stacks(to_device=True)

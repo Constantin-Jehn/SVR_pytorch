@@ -52,7 +52,7 @@ class SVR_optimizer():
         self.device = device
         print(f'Program runs on: {self.device}')
         self.stack_filenames = stack_filenames
-        self.k = len(self.stack_filenames)
+        
         self.mode = monai_mode
         self.pixdims = pixdims
 
@@ -61,6 +61,8 @@ class SVR_optimizer():
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
         self.fixed_image, self.stacks, self.slice_dimensions, self.rot_params_init, self.trans_params_init = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF, roi_only=roi_only, lr_vol_vol=lr_vol_vol)
+        
+        self.k = len(self.svr_preprocessor.stack_filenames)
         
         self.ground_truth = self.stacks
 
