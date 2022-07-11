@@ -23,12 +23,16 @@ def optimize():
 
     """
     filenames = ["14_3T_nody_001.nii.gz",
+                "14_3T_nody_002.nii.gz",
 
                 "10_3T_nody_001.nii.gz",
+                "10_3T_nody_002.nii.gz",
                 
                 "21_3T_nody_001.nii.gz",
+                "21_3T_nody_002.nii.gz",
                 
-                "23_3T_nody_001.nii.gz"]
+                "23_3T_nody_001.nii.gz",
+                "23_3T_nody_002.nii.gz"]
    
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
@@ -39,7 +43,7 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 8
+    epochs = 6
     inner_epochs = 2
     
     loss_fnc = "ncc"
@@ -51,7 +55,7 @@ def optimize():
     src_folder = "sample_data"
 
     current_date = datetime.datetime.now()
-    result_string = "Ep_" + str(epochs) + "_" + "reg_" + str(current_date.day) + "_" + str(current_date.month) + "_" + str(current_date.hour) + "_"  + str(current_date.minute)
+    result_string =   "rec_" + str(current_date.month) + "_" + str(current_date.day) + "_" +   str(current_date.hour) + "_"  + str(current_date.minute) + "_Ep_" + str(epochs)
     result_folder = os.path.join("results", result_string)
     tensor_board_folder = os.path.join("runs", result_string)
     
@@ -63,7 +67,7 @@ def optimize():
         pass
 
     #prev 0.0015
-    lr = 0.0003
+    lr = 0.0015
     #lambda function for setting learning rate
     lambda1 = lambda epoch: [0.1,0.3,0.5,0.8,1,1][epoch] if epoch  < 5  else 1
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2

@@ -47,6 +47,8 @@ class Preprocesser():
         self.mode = monai_mode
         self.tio_mode = tio_mode
 
+        #orders stack filenames according to motion corruption
+        #selects four stacks with least corruptions
         self.stack_filenames = self.order_stackfilenames_for_preregistration(stack_filenames)
         #self.writer = SummaryWriter("runs/test_session")
 
@@ -72,7 +74,8 @@ class Preprocesser():
         """
 
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        slice_dimensions = self.crop_images(upsampling=False,roi_only=roi_only)
+        slice_dimensions = self.crop_images(upsampling=True,roi_only=roi_only)
+
         # load cropped stacks
         stacks = self.load_stacks(to_device=True)
         # denoise stacks
@@ -120,7 +123,7 @@ class Preprocesser():
         stacks = self.load_stacks(to_device=True)
         return stacks
 
-    def crop_images(self, upsampling:bool=False, pixdim=0, roi_only = False)->None:
+    def crop_images(self, upsampling:bool=True, pixdim=1.0, roi_only = False)->None:
         """
         crops images from source directory according to provided mask and saves them to prep folder
 
@@ -143,6 +146,11 @@ class Preprocesser():
             path_stack = os.path.join(self.src_folder, filename)
             stack = tio.ScalarImage(path_stack)
 
+            if upsampling:
+                upsampler = tio.transforms.Resample(pixdim, image_interpolation = self.tio_mode)
+                stack = upsampler(stack)
+
+            #book keeping of dimensionality of slice dimensions e.g. later for def of transformation model
             slice_dimensions.append(list(stack.tensor.shape[1:]).index(min(list(stack.tensor.shape[1:]))))
 
             resampler = tio.transforms.Resample(stack)
@@ -150,8 +158,7 @@ class Preprocesser():
 
             #sets non masked values to zero
             if roi_only:
-                stack_tensor = stack.tensor
-                stack_tensor[t.eq(resampled_mask.tensor,0)] = 0
+                stack_tensor = stack.tensor * resampled_mask.tensor
                 stack.set_data(stack_tensor)
               
             subject = tio.Subject(stack=stack, mask=resampled_mask)
@@ -168,6 +175,7 @@ class Preprocesser():
 
             cropped_stack = cropper(subject)
 
+            """
             if upsampling:
                 if i == 0:
                     # only upsample first stack, for remaining stack it's done by resamplich to this stack
@@ -178,8 +186,12 @@ class Preprocesser():
                         self.prep_folder, self.stack_filenames[0])
                     resampler = tio.transforms.Resample(path_stack, image_interpolation = self.tio_mode)
                     cropped_stack = resampler(cropped_stack)
+            """
 
             path_dst = os.path.join(self.prep_folder, filename)
+
+            #to see if it'll be in standard planes
+            #cropped_stack.stack.affine(np.eye(4))
             cropped_stack.stack.save(path_dst)
 
         return slice_dimensions
@@ -310,6 +322,7 @@ class Preprocesser():
 
             model = custom_models.Volume_to_Volume(PSF, device=self.device)
             loss = loss_module.Loss_Volume_to_Volume("ncc", self.device)
+            #prev 0.0035
             optimizer = t.optim.Adam(model.parameters(), lr=0.001)
 
             fixed_image_resampled_tensor = utils.resample_fixed_image_to_local_stack(common_tensor,fixed_meta["affine"],stack_tensor,stack_meta["affine"],self.tio_mode,self.device)
@@ -459,6 +472,10 @@ class Preprocesser():
 
         #order filenames according to found order
         stack_filenames_ordered = [stack_filenames[i] for i in indices_tensor.tolist()]
+
+        #extract 4 images with least motion corruption
+        if len(stack_filenames_ordered) > 4:
+            stack_filenames_ordered = stack_filenames_ordered[:4]
 
         return stack_filenames_ordered
 

@@ -122,7 +122,7 @@ def resample_fixed_image(fixed_image:dict, pix_dim:tuple, result_folder:str, mod
     return fixed_image
 
 def resample_stacks(stacks:list, pix_dim:tuple, tio_mode:str)->list:
-    """resamples a list of stacks to given pis_dim
+    """resamples a list of stacks to given pix_dim
 
     Args:
         stacks (list): list of stacks as monai dicts
@@ -135,6 +135,7 @@ def resample_stacks(stacks:list, pix_dim:tuple, tio_mode:str)->list:
 
     stacks_updated = list()
     resampler = tio.transforms.Resample(pix_dim, image_interpolation=tio_mode)
+    
     for st in range(0,len(stacks)):
         tio_stack = monai_to_torchio(stacks[st])
         tio_stack_resampled = resampler(tio_stack)
