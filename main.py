@@ -23,12 +23,16 @@ def optimize():
 
     """
     filenames = ["14_3T_nody_001.nii.gz",
+                "14_3T_nody_002.nii.gz",
 
                 "10_3T_nody_001.nii.gz",
+                "10_3T_nody_002.nii.gz",
                 
                 "21_3T_nody_001.nii.gz",
+                "21_3T_nody_002.nii.gz",
                 
-                "23_3T_nody_001.nii.gz"]
+                "23_3T_nody_001.nii.gz",
+                "23_3T_nody_002.nii.gz"]
    
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
    
@@ -39,7 +43,7 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 8
+    epochs = 6
     inner_epochs = 2
     
     loss_fnc = "ncc"
