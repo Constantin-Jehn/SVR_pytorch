@@ -77,7 +77,7 @@ def optimize():
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
 
-    sav_gol_kernel_size = 13
+    sav_gol_kernel_size = 9
     sav_gol_order = 4
     psf_string = "Sav_Gol"
 
