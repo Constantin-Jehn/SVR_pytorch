@@ -42,7 +42,7 @@ class Preprocesser():
         self.prep_folder = prep_folder
         self.result_folder = result_folder
         
-        self.k = len(stack_filenames)
+        
         self.mask_filename = mask_filename
         self.mode = monai_mode
         self.tio_mode = tio_mode
@@ -51,7 +51,8 @@ class Preprocesser():
         #selects four stacks with least corruptions
         self.stack_filenames = self.order_stackfilenames_for_preregistration(stack_filenames)
         #self.writer = SummaryWriter("runs/test_session")
-
+        self.k = len(self.stack_filenames)
+        
     def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False)->tuple:
         """        
         preprocessing procedure before the optimization contains:
