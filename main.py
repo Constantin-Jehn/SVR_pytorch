@@ -55,9 +55,9 @@ def optimize():
     src_folder = "sample_data"
 
     current_date = datetime.datetime.now()
-    result_string =  "Rec_" +  str(current_date.month) + "_" + str(current_date.day) + "_" + str(current_date.hour) + "_"  + str(current_date.minute) +"_Ep_" + str(epochs)
+    result_string =  "Rec_" +  f"{current_date.month:02}" + "_" + f"{current_date.day:02}" + "_" + f"{current_date.hour:02}" + "_"  + f"{current_date.minute:02}" +"_Ep_" + str(epochs)
     result_folder = os.path.join("results", result_string)
-    tensor_board_folder = os.path.join("runs", result_string)
+    tensorboard_path = os.path.join("runs", result_string)
     
     try:
         os.mkdir(result_folder)
@@ -71,7 +71,7 @@ def optimize():
     lr = 0.0015
     
     #lr for volume to volume registration
-    lr_vol_vol = 0.0035
+    lr_vol_vol = 0.00035
     #lambda function for setting learning rate
     lambda1 = lambda epoch: [0.1,0.3,0.5,0.8,1,1][epoch] if epoch  < 5  else 1
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
@@ -113,6 +113,7 @@ def optimize():
             "Learning_rate_SVR": lr,
             "Learning_rate_prereg": lr_vol_vol
             },
+        "ROI_only": roi_only,
         "PSF": PSF_doc
     }
     parameter_file_dest = os.path.join(result_folder,"parameters.json")
@@ -120,8 +121,8 @@ def optimize():
     json.dump(parameter_file,out_file, indent=6)
     out_file.close()
 
-    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, loss_kernel_size, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only, lr_vol_vol=lr_vol_vol)
-    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensor_board_folder,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
+    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, loss_kernel_size, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only, lr_vol_vol=lr_vol_vol, tensorboard_path = tensorboard_path)
+    svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensorboard_path,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
     
 if __name__ == '__main__':
     optimize()

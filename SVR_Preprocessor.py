@@ -20,7 +20,7 @@ import SimpleITK as sitk
 import torchvision as tv
 from SVR_outlier_removal import Outlier_Removal_Slices_cste, Outlier_Removal_Voxels
 import utils
-#from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 class Preprocesser():
     def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, device:str, monai_mode:str, tio_mode:str)->None:
@@ -54,7 +54,7 @@ class Preprocesser():
         self.k = len(self.stack_filenames)
         #self.writer = SummaryWriter("runs/test_session")
 
-    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False, lr_vol_vol:float = 0.0035)->tuple:
+    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False, lr_vol_vol:float = 0.0035, tensorboard_path = "")->tuple:
         """        
         preprocessing procedure before the optimization contains:
         denoising, normalization, initial 3d-3d registration
@@ -99,7 +99,7 @@ class Preprocesser():
 
         stacks_preprocessed = utils.resample_stacks(stacks, init_pix_dim, self.tio_mode)
 
-        fixed_image, stacks, rot_params, trans_params = self.create_common_volume_registration(stacks_preprocessed, PSF, lr_vol_vol)
+        fixed_image, stacks, rot_params, trans_params = self.create_common_volume_registration(stacks_preprocessed, PSF, lr_vol_vol, tensorboard_path)
 
         #stacks = self.outlier_removal(fixed_image, stacks)
 
@@ -138,6 +138,8 @@ class Preprocesser():
         """
         path_mask = os.path.join(self.src_folder, self.mask_filename)
         mask = tio.LabelMap(path_mask)
+
+        mask = self.dilate_mask(mask)
         path_dst = os.path.join(self.prep_folder, self.mask_filename)
         mask.save(path_dst)
 
@@ -287,7 +289,7 @@ class Preprocesser():
         return stacks
 
 
-    def create_common_volume_registration(self, stacks:list, PSF, lr_vol_vol)->tuple:
+    def create_common_volume_registration(self, stacks:list, PSF, lr_vol_vol, tensorboard_path = "")->tuple:
         """
         creates common volume and return registered stacks
         Args:
@@ -297,6 +299,7 @@ class Preprocesser():
         Returns:
             tuple: inital fixed image, list of preregistered stacks, list of Rotation parameters of preregistration, list of translation parameters of preregistration
         """
+        writer = SummaryWriter(tensorboard_path)
 
         folder = "preprocessing"
         path = os.path.join(folder)
@@ -330,15 +333,16 @@ class Preprocesser():
             fixed_image_resampled_tensor = utils.resample_fixed_image_to_local_stack(common_tensor,fixed_meta["affine"],stack_tensor,stack_meta["affine"],self.tio_mode,self.device)
             
             stack_tensor = stacks[st]["image"].unsqueeze(0)
-            for ep in range(0, 18):
+            epochs = 18
+            for ep in range(0, epochs):
                 transformed_fixed_tensor, affine_tmp = model(fixed_image_resampled_tensor)
                 transformed_fixed_tensor = transformed_fixed_tensor.to(self.device)
                 loss_tensor = loss(transformed_fixed_tensor,stack_tensor)
                 loss_tensor.backward()
 
-                #self.writer.add_scalar(f"preregistrations_{st}", loss_tensor.item(), ep)
+                writer.add_scalar(f"preregistrations_{st}", loss_tensor.item(), ep)
 
-                if ep < 14:
+                if ep < epochs:
                     optimizer.step()
 
             transformed_fixed_tensor = transformed_fixed_tensor.detach()
@@ -511,3 +515,21 @@ class Preprocesser():
             error = t.norm(D-D_prime, p='fro') / t.norm(D, p='fro')
             r +=1
         return (r*error).item(), r
+
+    
+    def dilate_mask(self, mask:tio.LabelMap, kernel_size:int = 9) -> t.tensor:
+        """dilates mask for broader cropping
+
+        Args:
+            mask (tio.LabelMap): original mask
+            kernel_size (int, optional): _description_. Defaults to 9.
+
+        Returns:
+            t.tensor: _description_
+        """
+        mask_expanded = mask.tensor.unsqueeze(0)
+        kernel = t.ones(1,1,kernel_size,kernel_size,kernel_size,dtype=mask_expanded.dtype)
+        mask_dilated = t.clamp(t.nn.functional.conv3d(mask_expanded,kernel, padding = "same"),0,1)
+        mask_dilated = mask_dilated.squeeze().unsqueeze(0)
+        mask.set_data(mask_dilated)
+        return mask

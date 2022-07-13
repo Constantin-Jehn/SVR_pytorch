@@ -25,7 +25,7 @@ from SVR_Evaluation import psnr
 import utils
 
 class SVR_optimizer():
-    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, PSF, loss_kernel_size, monai_mode:str, tio_mode:str, roi_only:bool=False, lr_vol_vol:float = 0.0035)->None:
+    def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, pixdims:list, device:str, PSF, loss_kernel_size, monai_mode:str, tio_mode:str, roi_only:bool=False, lr_vol_vol:float = 0.0035, tensorboard_path = "")->None:
         timer = time.time()
 
         """
@@ -60,7 +60,7 @@ class SVR_optimizer():
         
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
-        self.fixed_image, self.stacks, self.slice_dimensions, self.rot_params_init, self.trans_params_init = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF, roi_only=roi_only, lr_vol_vol=lr_vol_vol)
+        self.fixed_image, self.stacks, self.slice_dimensions, self.rot_params_init, self.trans_params_init = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF, roi_only=roi_only, lr_vol_vol=lr_vol_vol, tensorboard_path = tensorboard_path)
         
         self.k = len(self.svr_preprocessor.stack_filenames)
         
