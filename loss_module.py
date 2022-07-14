@@ -14,10 +14,11 @@ class Loss_Volume_to_Volume(t.nn.Module):
     def __init__(self, loss_fnc:str, device) -> None:
         super().__init__()
         if loss_fnc == "ncc":
-            #self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=3, kernel_size=21)
-            
+            self.monai_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=3, kernel_size=21)
+            """
             vol_vol_ncc_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims=3, kernel_size=13)
             self.monai_loss = monai.losses.MaskedLoss(vol_vol_ncc_loss)
+            """
             
         elif loss_fnc == "mi":
             self.monai_loss = monai.losses.GlobalMutualInformationLoss(reduction = "sum")

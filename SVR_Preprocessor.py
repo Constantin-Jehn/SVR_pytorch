@@ -108,7 +108,7 @@ class Preprocesser():
         fixed_image = utils.resample_fixed_image(fixed_image, init_pix_dim,self.result_folder,self.mode,self.tio_mode)
 
         ##try cropping better after preregistration
-        fixed_image, stacks = utils.crop_roi_only(fixed_image, stacks, resampled_masks, self.tio_mode)
+        #fixed_image, stacks = utils.crop_roi_only(fixed_image, stacks, resampled_masks, self.tio_mode)
 
 
         if save_intermediates:
