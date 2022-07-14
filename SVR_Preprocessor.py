@@ -54,7 +54,7 @@ class Preprocesser():
         self.k = len(self.stack_filenames)
         #self.writer = SummaryWriter("runs/test_session")
 
-    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False, lr_vol_vol:float = 0.0035, tensorboard_path = "")->tuple:
+    def preprocess_stacks_and_common_vol(self, init_pix_dim:tuple, PSF, save_intermediates:bool=False, roi_only:bool = False, lr_vol_vol:float = 0.0035, tensorboard_path = "", pre_reg_epochs:int = 18)->tuple:
         """        
         preprocessing procedure before the optimization contains:
         denoising, normalization, initial 3d-3d registration
@@ -77,7 +77,7 @@ class Preprocesser():
         """
 
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
-        slice_dimensions = self.crop_images(upsampling=False,roi_only=roi_only)
+        slice_dimensions, resampled_masks = self.crop_images(upsampling=False,roi_only=roi_only)
 
         # load cropped stacks
         stacks = self.load_stacks(to_device=True)
@@ -97,14 +97,19 @@ class Preprocesser():
         if save_intermediates:
             stacks = utils.save_stacks(stacks, 'norm', self.mode)
 
-        stacks_preprocessed = utils.resample_stacks(stacks, init_pix_dim, self.tio_mode)
+        stacks_preprocessed, resampled_masks = utils.resample_stacks_and_masks(stacks, init_pix_dim, self.tio_mode, resampled_masks)
 
-        fixed_image, stacks, rot_params, trans_params = self.create_common_volume_registration(stacks_preprocessed, PSF, lr_vol_vol, tensorboard_path)
+        #pre registration
+        fixed_image, stacks, rot_params, trans_params = self.create_common_volume_registration(stacks_preprocessed, PSF, lr_vol_vol, tensorboard_path, resampled_masks, pre_reg_epochs)
 
         #stacks = self.outlier_removal(fixed_image, stacks)
 
         
         fixed_image = utils.resample_fixed_image(fixed_image, init_pix_dim,self.result_folder,self.mode,self.tio_mode)
+
+        ##try cropping better after preregistration
+        fixed_image, stacks = utils.crop_roi_only(fixed_image, stacks, resampled_masks, self.tio_mode)
+
 
         if save_intermediates:
             stacks = utils.save_stacks(stacks, 'reg', self.mode)
@@ -126,7 +131,7 @@ class Preprocesser():
         stacks = self.load_stacks(to_device=True)
         return stacks
 
-    def crop_images(self, upsampling:bool=True, pixdim=1.0, roi_only = False)->None:
+    def crop_images(self, upsampling:bool=False, pixdim=1.0, roi_only = False)->None:
         """
         crops images from source directory according to provided mask and saves them to prep folder
 
@@ -139,11 +144,13 @@ class Preprocesser():
         path_mask = os.path.join(self.src_folder, self.mask_filename)
         mask = tio.LabelMap(path_mask)
 
-        mask = self.dilate_mask(mask)
+        mask = self.dilate_mask(mask, kernel_size=15)
         path_dst = os.path.join(self.prep_folder, self.mask_filename)
         mask.save(path_dst)
 
         slice_dimensions = list()
+
+        resampled_mask_list = list()
 
         for i in range(0, self.k):
             #resample mask to each stack
@@ -160,6 +167,7 @@ class Preprocesser():
 
             resampler = tio.transforms.Resample(stack)
             resampled_mask = resampler(deepcopy(mask))
+            
 
             #sets non masked values to zero
             if roi_only:
@@ -180,6 +188,11 @@ class Preprocesser():
 
             cropped_stack = cropper(subject)
 
+            subject_mask = tio.Subject(stack = resampled_mask, mask = resampled_mask)
+            resampled_mask = cropper(subject_mask)
+            ##here the stack is actually the cropped mask itself
+            resampled_mask_list.append(resampled_mask.stack)
+            
             """
             if upsampling:
                 if i == 0:
@@ -199,7 +212,7 @@ class Preprocesser():
             #cropped_stack.stack.affine(np.eye(4))
             cropped_stack.stack.save(path_dst)
 
-        return slice_dimensions
+        return slice_dimensions, resampled_mask_list
 
     def load_stacks(self, to_device=False)->list:
         """
@@ -289,7 +302,7 @@ class Preprocesser():
         return stacks
 
 
-    def create_common_volume_registration(self, stacks:list, PSF, lr_vol_vol, tensorboard_path = "")->tuple:
+    def create_common_volume_registration(self, stacks:list, PSF, lr_vol_vol, tensorboard_path = "", resampled_masks:list = [], epochs:int = 18)->tuple:
         """
         creates common volume and return registered stacks
         Args:
@@ -306,7 +319,8 @@ class Preprocesser():
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
         stacks[0]["image"] = stacks[0]["image"].unsqueeze(0)
         fixed_meta = deepcopy(stacks[0]["image_meta_dict"])
-        fixed_meta["filename_or_obj"] = "reconstruction_volume.nii.gz"
+        #use result string 
+        fixed_meta["filename_or_obj"] = self.result_folder[8:] + "vol.nii.gz"
         common_tensor = stacks[0]["image"].unsqueeze(0)
 
         affine_transform_monai = monai.networks.layers.AffineTransform(mode = "bilinear",  normalized = True, padding_mode = "zeros")
@@ -333,11 +347,11 @@ class Preprocesser():
             fixed_image_resampled_tensor = utils.resample_fixed_image_to_local_stack(common_tensor,fixed_meta["affine"],stack_tensor,stack_meta["affine"],self.tio_mode,self.device)
             
             stack_tensor = stacks[st]["image"].unsqueeze(0)
-            epochs = 18
+ 
             for ep in range(0, epochs):
                 transformed_fixed_tensor, affine_tmp = model(fixed_image_resampled_tensor)
                 transformed_fixed_tensor = transformed_fixed_tensor.to(self.device)
-                loss_tensor = loss(transformed_fixed_tensor,stack_tensor)
+                loss_tensor = loss(transformed_fixed_tensor,stack_tensor, resampled_masks[st].tensor.unsqueeze(0))
                 loss_tensor.backward()
 
                 writer.add_scalar(f"preregistrations_{st}", loss_tensor.item(), ep)

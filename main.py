@@ -45,6 +45,8 @@ def optimize():
     
     epochs = 6
     inner_epochs = 2
+
+    
     
     loss_fnc = "ncc"
     opt_alg = "Adam"
@@ -71,13 +73,14 @@ def optimize():
     lr = 0.0015
     
     #lr for volume to volume registration
-    lr_vol_vol = 0.00035
+    lr_vol_vol = 0.0035
+    pre_reg_epochs = 18
     #lambda function for setting learning rate
     lambda1 = lambda epoch: [0.1,0.3,0.5,0.8,1,1][epoch] if epoch  < 5  else 1
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
 
-    sav_gol_kernel_size = 11
+    sav_gol_kernel_size = 13
     sav_gol_order = 4
     psf_string = "Sav_Gol"
 
@@ -111,17 +114,18 @@ def optimize():
             "Loss_kernel_size": loss_kernel_size,
             "Optimisation_algorithm": opt_alg,
             "Learning_rate_SVR": lr,
-            "Learning_rate_prereg": lr_vol_vol
+            "Learning_rate_prereg": lr_vol_vol,
+            "Epochs_preregistration": pre_reg_epochs
             },
         "ROI_only": roi_only,
         "PSF": PSF_doc
     }
-    parameter_file_dest = os.path.join(result_folder,"parameters.json")
+    parameter_file_dest = os.path.join(result_folder,result_string + ".json")
     out_file = open(parameter_file_dest, "w")
     json.dump(parameter_file,out_file, indent=6)
     out_file.close()
 
-    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, loss_kernel_size, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only, lr_vol_vol=lr_vol_vol, tensorboard_path = tensorboard_path)
+    svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, loss_kernel_size, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only, lr_vol_vol=lr_vol_vol, tensorboard_path = tensorboard_path, pre_reg_epochs=pre_reg_epochs)
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensorboard_path,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
     
 if __name__ == '__main__':

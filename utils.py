@@ -121,7 +121,7 @@ def resample_fixed_image(fixed_image:dict, pix_dim:tuple, result_folder:str, mod
 
     return fixed_image
 
-def resample_stacks(stacks:list, pix_dim:tuple, tio_mode:str)->list:
+def resample_stacks_and_masks(stacks:list, pix_dim:tuple, tio_mode:str, masks:list)->list:
     """resamples a list of stacks to given pix_dim
 
     Args:
@@ -139,12 +139,17 @@ def resample_stacks(stacks:list, pix_dim:tuple, tio_mode:str)->list:
     for st in range(0,len(stacks)):
         tio_stack = monai_to_torchio(stacks[st])
         tio_stack_resampled = resampler(tio_stack)
+
+        mask_resampler = tio.transforms.Resample(tio_stack_resampled)
+        mask_resampled = mask_resampler(masks[st])
+        masks[st] = mask_resampled
+
         filename = stacks[st]["image_meta_dict"]["filename_or_obj"]
         resampled_monai = update_monai_from_tio(tio_stack_resampled,stacks[st],filename)
         resampled_monai["image"] = resampled_monai["image"].squeeze().unsqueeze(0)
         stacks_updated.append(resampled_monai)
     
-    return stacks_updated
+    return stacks_updated, masks
 
 
 def monai_to_torchio(monai_dict:dict)->tio.ScalarImage:
@@ -214,5 +219,37 @@ def normalize_zero_to_one(tensor:t.tensor)->t.tensor:
     if t.amax(tensor) > 1e-5:
         tensor = tensor / t.amax(tensor)
     return tensor
+
+def crop_roi_only(fixed_image:dict, stacks:list, resampled_masks:list, tio_mode:str)->tuple:
+    """crops fixed image and stacks to the dilated region of interest
+
+    Args:
+        fixed_image (dict): preregistered common volume as monai dict
+        stacks (list): list of the stacks to be considered for SVR
+        resampled_masks (list): one dilated mask already resampled to all the stacks
+
+    Returns:
+        tuple: fixed_imaged (cropped to roi), stacks(cropped to roi)
+    """
+
+    #parse to tio format
+    fixed_image_tio = monai_to_torchio(fixed_image)
+    #sample mask to fixed image (should be identical to first stack), but to be sure...
+    resampler_fixed = tio.transforms.Resample(fixed_image_tio, image_interpolation=tio_mode)
+    mask_fixed_image = resampler_fixed(resampled_masks[0])
+
+    #crop
+    fixed_image_tio.set_data(fixed_image_tio.tensor * mask_fixed_image.tensor)
+    #back to monai
+    fixed_image = update_monai_from_tio(fixed_image_tio,fixed_image,fixed_image["image_meta_dict"]["filename_or_obj"])
+
+    #crop stack
+    for st in range(0, len(stacks)):
+        stack_tensor = stacks[st]["image"]
+        mask_tensor = resampled_masks[0].tensor.to(device)
+        stacks[st]["image"] = stack_tensor * mask_tensor
+    
+    return fixed_image, stacks
+
 
 
