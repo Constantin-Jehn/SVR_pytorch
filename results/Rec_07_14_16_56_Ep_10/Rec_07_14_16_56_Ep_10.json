@@ -1,0 +1,23 @@
+{
+      "Result_folder": "results/Rec_07_14_16_56_Ep_10",
+      "Interpolation": {
+            "monai_interpolation_mode": "bicubic",
+            "tochio_interpolation_mode": "welch"
+      },
+      "Opimization": {
+            "Epochs": 10,
+            "Inner_epochs": 2,
+            "Loss_fnc": "ncc",
+            "Loss_kernel_size": 31,
+            "Optimisation_algorithm": "Adam",
+            "Learning_rate_SVR": 0.0015,
+            "Learning_rate_prereg": 0.0035,
+            "Epochs_preregistration": 18
+      },
+      "ROI_only": false,
+      "PSF": {
+            "name": "Sav_Gol",
+            "kernel_size": 13,
+            "order": 4
+      }
+}

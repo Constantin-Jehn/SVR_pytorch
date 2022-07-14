@@ -32,7 +32,7 @@ class Loss_Volume_to_Volume(t.nn.Module):
             t.tensor: loss tensor
         """
         mask = mask.to(self.device)
-        return self.monai_loss(tr_fixed_tensor,stack_tensor, mask = mask)
+        return self.monai_loss(tr_fixed_tensor,stack_tensor)
 
 class Loss_Volume_to_Slice(t.nn.Module):
     """class to calculate loss for 3d-2d registration
