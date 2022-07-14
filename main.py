@@ -43,7 +43,7 @@ def optimize():
     mode = "bicubic"
     tio_mode = "welch"
     
-    epochs = 6
+    epochs = 4
     inner_epochs = 2
 
     

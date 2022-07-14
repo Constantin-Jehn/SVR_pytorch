@@ -30,6 +30,7 @@ class Loss_Volume_to_Volume(t.nn.Module):
         Returns:
             t.tensor: loss tensor
         """
+        mask = mask.to(self.device)
         return self.monai_loss(tr_fixed_tensor,stack_tensor, mask = mask)
 
 class Loss_Volume_to_Slice(t.nn.Module):
