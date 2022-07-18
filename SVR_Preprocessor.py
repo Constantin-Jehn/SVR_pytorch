@@ -144,7 +144,7 @@ class Preprocesser():
         path_mask = os.path.join(self.src_folder, self.mask_filename)
         mask = tio.LabelMap(path_mask)
 
-        #mask = self.dilate_mask(mask, kernel_size=15)
+        mask = self.dilate_mask(mask, kernel_size=15)
         path_dst = os.path.join(self.prep_folder, self.mask_filename)
         mask.save(path_dst)
 
