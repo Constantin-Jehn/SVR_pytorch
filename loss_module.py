@@ -42,9 +42,11 @@ class Loss_Volume_to_Slice(t.nn.Module):
         self.device = device
         self.kernel_size = kernel_size
 
-        self.monai_ncc_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims = 2, kernel_size = self.kernel_size)
+        #self.monai_ncc_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims = 2, kernel_size = self.kernel_size)
+        vol_slice_monai_ncc_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims = 2, kernel_size = self.kernel_size)
+        self.monai_ncc_loss = monai.losses.MaskedLoss(vol_slice_monai_ncc_loss)
 
-    def forward(self, tr_fixed_tensor:t.tensor, local_slices:t.tensor, n_slices:int, slice_dim:int)->t.tensor:
+    def forward(self, tr_fixed_tensor:t.tensor, local_slices:t.tensor, n_slices:int, slice_dim:int, resampled_mask:t.tensor)->t.tensor:
         """_summary_
 
         Args:
@@ -52,24 +54,29 @@ class Loss_Volume_to_Slice(t.nn.Module):
             local_slices (t.tensor): slice as volume (ground truth)
             n_slices (int): number of slices in stack
             slice_dim (int): dimension along which stack is sliced
+            resampled_mask(t.tensor): segmentation mask resampled to current stack
 
         Returns:
             t.tensor: loss tensor
         """
         loss = t.zeros(1, device = self.device)
+        resampled_mask_tensor = resampled_mask.tensor
         for sl in range(0,n_slices):
             if slice_dim == 0:
                 pred = tr_fixed_tensor[sl,:,sl,:,:]
                 target = local_slices[sl,:,sl,:,:]
+                mask = resampled_mask_tensor[:,sl,:,:]
             elif slice_dim == 1:
                 pred = tr_fixed_tensor[sl,:,:,sl,:]
                 target = local_slices[sl,:,:,sl,:]
+                mask = resampled_mask_tensor[:,:,sl,:]
             elif slice_dim == 2:
                 pred = tr_fixed_tensor[sl,:,:,:,sl]
                 target = local_slices[sl,:,:,:,sl]
+                mask = resampled_mask_tensor[:,:,:,sl]
                 #print(f'pred: {str(pred.device)}, target: {str(target.device)}, loss: {str(loss.device)}')
             #loss = loss + ncc_loss(pred.unsqueeze(0),target.unsqueeze(0), device = self.device, win = (self.kernel_size, self.kernel_size))
-            loss = loss + self.monai_ncc_loss(pred.unsqueeze(0),target.unsqueeze(0))
+            loss = loss + self.monai_ncc_loss(pred.unsqueeze(0),target.unsqueeze(0), mask = mask.unsqueeze(0))
         return loss
  
 

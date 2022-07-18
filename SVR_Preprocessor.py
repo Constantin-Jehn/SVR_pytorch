@@ -74,6 +74,7 @@ class Preprocesser():
                 slice_dimensions (list)
                 rot_params (list): inital rotation parameters of pre registration
                 trans_params(list): initial translation parameters of pre registration
+                resampled_masks(list): masks resamples to all seleted stacks
         """
 
         #to_device = monai.transforms.ToDeviced(keys = ["image"], device = self.device)
@@ -117,7 +118,7 @@ class Preprocesser():
         for st in range(0, len(stacks)):
             stacks[st]["image"] = stacks[st]["image"].squeeze().unsqueeze(0)
 
-        return fixed_image, stacks, slice_dimensions, rot_params, trans_params
+        return fixed_image, stacks, slice_dimensions, rot_params, trans_params, resampled_masks
 
     def get_cropped_stacks(self)->list:
         """
@@ -144,7 +145,7 @@ class Preprocesser():
         path_mask = os.path.join(self.src_folder, self.mask_filename)
         mask = tio.LabelMap(path_mask)
 
-        mask = self.dilate_mask(mask, kernel_size=15)
+        #mask = self.dilate_mask(mask, kernel_size=15)
         path_dst = os.path.join(self.prep_folder, self.mask_filename)
         mask.save(path_dst)
 
