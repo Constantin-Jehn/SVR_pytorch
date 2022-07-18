@@ -36,7 +36,7 @@ def optimize():
    
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
-    epochs = 5
+    epochs = 10
     inner_epochs = 2
 
     pixdim_float = 1.0
