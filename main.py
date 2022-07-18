@@ -67,7 +67,7 @@ def optimize():
 
     #prev 0.0015
     #lr for 2D/3D registratoin
-    lr = 0.0015
+    lr = 0.0010
     
     #lr for volume to volume registration
     lr_vol_vol = 0.0035
