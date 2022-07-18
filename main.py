@@ -35,22 +35,19 @@ def optimize():
                 "23_3T_nody_002.nii.gz"]
    
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
-   
-    pixdims_float = [1.2,1.2,1.2,1.2,1.2,1.2,1.2,1.2,1.2,1.2,1.2,1.2,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
-
-    pixdims = [(x,x,x) for x in pixdims_float]
-
-    mode = "bicubic"
-    tio_mode = "welch"
     
     epochs = 5
     inner_epochs = 2
 
-    
-    
+    pixdim_float = 1.0
+    pixdim_list = [pixdim_float] * epochs
+    pixdims = [(x,x,x) for x in pixdim_list]
+
+    mode = "bicubic"
+    tio_mode = "welch"
+
     loss_fnc = "ncc"
     opt_alg = "Adam"
-
 
     src_folder = "sample_data"
     prep_folder = "cropped_images"
@@ -103,6 +100,7 @@ def optimize():
 
     parameter_file = {
         "Result_folder": result_folder,
+        "Resolution": pixdim_float,
         "Interpolation": {
             "monai_interpolation_mode": mode,
             "tochio_interpolation_mode": tio_mode
