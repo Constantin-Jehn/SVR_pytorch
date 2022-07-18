@@ -140,7 +140,7 @@ def resample_stacks_and_masks(stacks:list, pix_dim:tuple, tio_mode:str, masks:li
         tio_stack = monai_to_torchio(stacks[st])
         tio_stack_resampled = resampler(tio_stack)
 
-        mask_resampler = tio.transforms.Resample(tio_stack_resampled)
+        mask_resampler = tio.transforms.Resample(tio_stack_resampled, image_interpolation=tio_mode)
         mask_resampled = mask_resampler(masks[st])
         masks[st] = mask_resampled
 

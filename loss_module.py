@@ -60,7 +60,7 @@ class Loss_Volume_to_Slice(t.nn.Module):
             t.tensor: loss tensor
         """
         loss = t.zeros(1, device = self.device)
-        resampled_mask_tensor = resampled_mask.tensor
+        resampled_mask_tensor = resampled_mask.tensor.to(self.device)
         for sl in range(0,n_slices):
             if slice_dim == 0:
                 pred = tr_fixed_tensor[sl,:,sl,:,:]

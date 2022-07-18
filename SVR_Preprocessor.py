@@ -1,5 +1,6 @@
 
 from fileinput import filename
+from inspect import stack
 import torchio as tio
 import monai
 
@@ -102,11 +103,14 @@ class Preprocesser():
 
         #pre registration
         fixed_image, stacks, rot_params, trans_params = self.create_common_volume_registration(stacks_preprocessed, PSF, lr_vol_vol, tensorboard_path, resampled_masks, pre_reg_epochs)
+        #stacks are resampled in between --> masks need to be adjusted
+        resampled_masks = self.resample_masks_to_stacks(stacks, resampled_masks)
 
         #stacks = self.outlier_removal(fixed_image, stacks)
 
         
         fixed_image = utils.resample_fixed_image(fixed_image, init_pix_dim,self.result_folder,self.mode,self.tio_mode)
+
 
         ##try cropping better after preregistration
         #fixed_image, stacks = utils.crop_roi_only(fixed_image, stacks, resampled_masks, self.tio_mode)
@@ -548,3 +552,22 @@ class Preprocesser():
         mask_dilated = mask_dilated.squeeze().unsqueeze(0)
         mask.set_data(mask_dilated)
         return mask
+
+    def resample_masks_to_stacks(self, stacks:list, masks:list)-> list:
+        """resamples masks to stacks (after they were transformed during preregistration)
+
+        Args:
+            stacks (list): transformed stacks
+            masks (list):masks
+
+        Returns:
+            list: resampled masks
+        """
+        masks_update = list()
+        for st in range(0,len(stacks)):
+            tio_stack = utils.monai_to_torchio(stacks[st])
+            resampler = tio.transforms.Resample(tio_stack)
+            mask_resampled = resampler(masks[st])
+            masks_update.append(mask_resampled)
+        return masks_update
+
