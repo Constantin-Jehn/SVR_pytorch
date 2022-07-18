@@ -15,7 +15,8 @@ def psnr(fixed_image:dict, stacks:list, n_slices:int, tio_mode:str)->float128:
     psnr = 0
     #pictures are normalized between zero and 1
     max_value = 1
-    psnr_metric = PSNR(device = fixed_tio.data.device, max_value=max_value)
+    #psnr_metric = PSNR(device = fixed_tio.data.device, max_value=max_value)
+    psnr_metric = monai.metrics.PSNRMetric(max_val=1,reduction = "mean")
     for st in range(0,len(stacks)):
         n_slices_total +=n_slices[st]
         stack_tio = utils.monai_to_torchio(stacks[st])
@@ -29,7 +30,7 @@ def psnr(fixed_image:dict, stacks:list, n_slices:int, tio_mode:str)->float128:
 
         for sl in range(0,n_slices[st]):
             pred, target = fixed_resampled.tensor[0,:,:,sl], utils.normalize_zero_to_one(stack_tio.tensor[0,:,:,sl])
-            psnr_tmp = psnr_metric(pred,target)
+            psnr_tmp = t.mean(psnr_metric(pred,target))
             """
             finite_entries =  t.isfinite(psnr_raw_res)
             psnr_clean = t.sum(psnr_raw_res[finite_entries]) / t.sum(finite_entries)
