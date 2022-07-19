@@ -91,7 +91,7 @@ def optimize():
     else:
         assert('Choose Sav_Gol or Gaussian as PSF')
 
-    loss_kernel_size = 31
+    loss_kernel_size = 17
 
     from_checkpoint = False
     last_rec_file = "reconstruction_volume_10.nii.gz"
