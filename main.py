@@ -67,13 +67,13 @@ def optimize():
 
     #prev 0.0015
     #lr for 2D/3D registratoin
-    lr = 0.0025
+    lr = 0.0013
     
     #lr for volume to volume registration
     lr_vol_vol = 0.0035
     pre_reg_epochs = 18
     #lambda function for setting learning rate
-    lambda1 = lambda epoch: [0.1,0.2,0.3,0.4,0.6,0.8,1][epoch] if epoch  < 7  else 1
+    lambda1 = lambda epoch: [0.1,0.2,0.3,0.4,0.6,0.8,1][epoch] if epoch  < 7  else 1.0
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.5 if epoch in [1] else 0.25 if epoch in [2,3,4] else 0.2
     #lambda1 = lambda epoch: 1 if epoch in [0] else 0.2
 
