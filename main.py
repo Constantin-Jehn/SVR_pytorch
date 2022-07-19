@@ -125,7 +125,7 @@ def optimize():
 
     svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, loss_kernel_size, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only, lr_vol_vol=lr_vol_vol, tensorboard_path = tensorboard_path, pre_reg_epochs=pre_reg_epochs)
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensorboard_path,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
-    
+     
 if __name__ == '__main__':
     optimize()
     #preprocess()

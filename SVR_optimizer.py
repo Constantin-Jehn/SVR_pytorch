@@ -330,11 +330,11 @@ class SVR_optimizer():
 
 
             fixed_dict = {"image": fixed_image_tensor, "image_meta_dict": fixed_image_meta}
-            psnr_value = psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)
+            psnr_value = psnr(fixed_dict,self.stacks,n_slices, self.tio_mode, self.resampled_masks)
             writer.add_scalar(f"PSNR", psnr_value, epoch)
             documentation_array[epoch,-1] = psnr_value
 
-            psnr_value = psnr(fixed_dict,self.stacks,n_slices, self.tio_mode)
+            #psnr_value = psnr(fixed_dict,self.stacks,n_slices, self.tio_mode, self.resampled_masks)
             writer.add_scalar(f"PSNR", psnr_value, epoch)
             documentation_array[epoch,-1] = psnr_value
 

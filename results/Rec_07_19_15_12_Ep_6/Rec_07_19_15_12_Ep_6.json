@@ -11,7 +11,7 @@
             "Loss_fnc": "ncc",
             "Loss_kernel_size": 17,
             "Optimisation_algorithm": "Adam",
-            "Learning_rate_SVR": 0.0003,
+            "Learning_rate_SVR": 0.0013,
             "Learning_rate_prereg": 0.0035,
             "Epochs_preregistration": 18
       },
