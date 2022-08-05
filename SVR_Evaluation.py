@@ -19,9 +19,10 @@ def psnr(fixed_image:dict, stacks:list, n_slices:int, tio_mode:str, resampled_ma
     max_value = 1
     psnr_metric = PSNR(device = fixed_tio.data.device, max_value=max_value)
     #psnr_metric = monai.metrics.PSNRMetric(max_val=1,reduction = "mean")
+    n_slices_total = 0
     for st in range(0,len(stacks)):
 
-        n_slices_total +=n_slices[st]
+        
         stack_tio = utils.monai_to_torchio(stacks[st])
         resampler = tio.Resample(stack_tio, image_interpolation=tio_mode)
         fixed_resampled = resampler(fixed_tio)
@@ -44,6 +45,7 @@ def psnr(fixed_image:dict, stacks:list, n_slices:int, tio_mode:str, resampled_ma
             #1dim vector is ok, psnr doesn't take spatial closeness into account
             if t.numel(pred_masked) > 0:
                 psnr_tmp = t.mean(psnr_metric(pred_masked.unsqueeze(0),target_masked.unsqueeze(0)))
+                n_slices_total = n_slices_total + 1
             """
             finite_entries =  t.isfinite(psnr_raw_res)
             psnr_clean = t.sum(psnr_raw_res[finite_entries]) / t.sum(finite_entries)

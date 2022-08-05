@@ -16,11 +16,11 @@ os.environ["taskset"] = "21-40"
     
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-    """
+    
     filenames = ["10_3T_nody_001.nii.gz",
                 
                 "14_3T_nody_001.nii.gz"]
-
+    
     """
     filenames = ["14_3T_nody_001.nii.gz",
                 "14_3T_nody_002.nii.gz",
@@ -33,13 +33,20 @@ def optimize():
                 
                 "23_3T_nody_001.nii.gz",
                 "23_3T_nody_002.nii.gz"]
-   
+    """
+    """
+    filenames = ["stack_1.nii.gz",
+                "stack_2.nii.gz",
+                "stack_3.nii.gz",
+                "stack_4.nii.gz",
+                "stack_5.nii.gz"]
+    """
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
-    epochs = 6
+    epochs = 1
     inner_epochs = 2
 
-    pixdim_float = 1.0
+    pixdim_float = 2.0
     pixdim_list = [pixdim_float] * epochs
     pixdims = [(x,x,x) for x in pixdim_list]
 
@@ -118,6 +125,7 @@ def optimize():
         "ROI_only": roi_only,
         "PSF": PSF_doc
     }
+
     parameter_file_dest = os.path.join(result_folder,result_string + ".json")
     out_file = open(parameter_file_dest, "w")
     json.dump(parameter_file,out_file, indent=6)

@@ -1,7 +1,8 @@
 import imp
 from multiprocessing import reduction
 from turtle import forward
-import monai 
+import monai
+from numpy import dtype 
 import torch as t
 
 from voxelmorph_losses import ncc_loss
@@ -37,10 +38,12 @@ class Loss_Volume_to_Volume(t.nn.Module):
 class Loss_Volume_to_Slice(t.nn.Module):
     """class to calculate loss for 3d-2d registration
     """
-    def __init__(self, kernel_size, loss_fnc:str,device):
+    def __init__(self, kernel_size, loss_fnc:str,device, lambda_reg:float, sigma:float):
         super(Loss_Volume_to_Slice,self).__init__()
         self.device = device
         self.kernel_size = kernel_size
+        self.lambda_reg = lambda_reg
+        self.sigma = sigma
 
         #self.monai_ncc_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims = 2, kernel_size = self.kernel_size)
         vol_slice_monai_ncc_loss = monai.losses.LocalNormalizedCrossCorrelationLoss(spatial_dims = 2, kernel_size = self.kernel_size)
@@ -61,6 +64,7 @@ class Loss_Volume_to_Slice(t.nn.Module):
         """
         loss = t.zeros(1, device = self.device)
         resampled_mask_tensor = resampled_mask.tensor.to(self.device)
+        #reg = edge_preserving_regularizer(tr_fixed_tensor[0,0,:,:,:], resampled_mask, sigma = self.sigma)
         for sl in range(0,n_slices):
             if slice_dim == 0:
                 pred = tr_fixed_tensor[sl,:,sl,:,:]
@@ -77,8 +81,69 @@ class Loss_Volume_to_Slice(t.nn.Module):
                 #print(f'pred: {str(pred.device)}, target: {str(target.device)}, loss: {str(loss.device)}')
             #loss = loss + ncc_loss(pred.unsqueeze(0),target.unsqueeze(0), device = self.device, win = (self.kernel_size, self.kernel_size))
             loss = loss + self.monai_ncc_loss(pred.unsqueeze(0),target.unsqueeze(0), mask = mask.unsqueeze(0))
-        return loss
+        return loss 
  
+def edge_preserving_regularizer(X:t.tensor, mask:t.tensor, sigma:float)->float:
+    """
+
+    Args:
+        X (t.tensor): fixed_image, resampled (H,W,D)
+        mask (t.tensor): segementation mask (b,H,W,D)
+        sigma (float): _description_
+
+    Returns:
+        float: value of regularization term
+    """
+    #indices inside mask
+    regularizer = t.zeros(1, device=X.device, requires_grad=True)
+    #gives indices as tuple (tensor(x_indices),tensor(y_indices),tensor(z_indices))
+    relevant_indices = (mask.tensor).nonzero(as_tuple = True)[-3:]
+    for voxel in range(0,len(relevant_indices[0])):
+        #get index in X
+        i = (relevant_indices[0][voxel],relevant_indices[1][voxel],relevant_indices[0][voxel])
+        neighbour_indices, d = neighbour_voxels(i,X.shape[-3:], X.device)
+        X_center_value = X[i]
+        for n in range(0,len(neighbour_indices)):
+            argument = t.div( (X[neighbour_indices[n]] - X_center_value), sigma * d[n])
+            regularizer = regularizer + phi(argument)
+    return regularizer
+
+def neighbour_voxels(i:tuple, X_shape:tuple, X_device:str)->tuple:
+    """Calculates neighbouring indices and gives back those indices and the norm of the vectors d between i and the neighbours
+
+    Args:
+        i (tuple): central index
+        X_shape (tuple): shape of common volume
+
+    Returns:
+        tuple: neighbour_indices(list), d(t.tensor)
+    """
+    neighbour_indices = list()
+    for x_val in [-1,0,1]:
+        x_coord = i[0] + x_val
+        for y_val in [-1,0,1]:
+            y_coord = i[1] + y_val
+            for z_val in [-1,0,1]:
+                 z_coord = i[2] + z_val
+                 inside = x_coord in range(0,X_shape[0]) and y_coord in range(0,X_shape[1]) and z_coord in range(X_shape[2])
+                 not_center = not(x_val == 0 and y_val == 0 and z_val==0)
+                 if inside and not_center:
+                     neighbour_indices.append((x_coord,y_coord,z_coord))
+    vecs = t.tensor(neighbour_indices,device=X_device,dtype = float) - t.tensor(i,device=X_device,dtype = float)
+    d = t.norm(vecs, dim = 1)
+    return neighbour_indices, d
+
+
+def phi(t_var:float) -> float:
+    """formula phi(t) from Kuklisove (2012)
+
+    Args:
+        t (float): see equation (3)
+
+    Returns:
+        float: output of simple function
+    """
+    return 2 * t.sqrt(1 + t.pow(t_var,t.tensor(2,device = t_var.device))) - 2
 
 
 class ncc(t.nn.Module):

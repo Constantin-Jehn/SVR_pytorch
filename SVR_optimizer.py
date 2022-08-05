@@ -529,7 +529,7 @@ class SVR_optimizer():
             else:
                 kernel_size = loss_kernel_size
 
-            loss = loss_module.Loss_Volume_to_Slice(kernel_size, loss_fnc, self.device)
+            loss = loss_module.Loss_Volume_to_Slice(kernel_size, loss_fnc, self.device, lambda_reg=0.1, sigma=0.2)
             losses.append(loss)
 
             if opt_alg == "SGD":
