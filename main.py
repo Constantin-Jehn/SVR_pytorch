@@ -17,9 +17,13 @@ os.environ["taskset"] = "21-40"
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
     
-    filenames = ["10_3T_nody_001.nii.gz",
-                
-                "14_3T_nody_001.nii.gz"]
+    filenames = ["stack_1.nii.gz",
+                "stack_2.nii.gz",
+                "stack_3.nii.gz",
+                "stack_4.nii.gz",
+                "stack_5.nii.gz",
+                "stack_6.nii.gz"
+                ]
     
     """
     filenames = ["14_3T_nody_001.nii.gz",
@@ -41,12 +45,12 @@ def optimize():
                 "stack_4.nii.gz",
                 "stack_5.nii.gz"]
     """
-    file_mask = "mask_10_3T_brain_smooth.nii.gz"
+    file_mask = "mask.nii.gz"
     
     epochs = 1
     inner_epochs = 2
 
-    pixdim_float = 2.0
+    pixdim_float = 1.0
     pixdim_list = [pixdim_float] * epochs
     pixdims = [(x,x,x) for x in pixdim_list]
 

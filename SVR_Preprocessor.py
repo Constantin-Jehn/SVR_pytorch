@@ -1,4 +1,5 @@
 
+from ctypes import util
 from fileinput import filename
 from inspect import stack
 import torchio as tio
@@ -162,6 +163,7 @@ class Preprocesser():
             filename = self.stack_filenames[i]
             path_stack = os.path.join(self.src_folder, filename)
             stack = tio.ScalarImage(path_stack)
+            stack = utils.check_and_correct_time_dim_tio(stack)
 
             if upsampling:
                 upsampler = tio.transforms.Resample(pixdim, image_interpolation = self.tio_mode)
@@ -489,6 +491,7 @@ class Preprocesser():
             filename = stack_filenames[st]
             path_stack = os.path.join(self.src_folder, filename)
             stack = tio.ScalarImage(path_stack)
+            stack = utils.check_and_correct_time_dim_tio(stack)
             within_stack_error, r = self.within_stack_error(stack.data,beta)
             within_stack_errors[st] = within_stack_error
             iterations.append(r)

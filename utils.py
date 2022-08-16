@@ -251,5 +251,13 @@ def crop_roi_only(fixed_image:dict, stacks:list, resampled_masks:list, tio_mode:
     
     return fixed_image, stacks
 
+def check_and_correct_time_dim_tio(stack:tio.ScalarImage)->tio.ScalarImage:
+    img_tensor = stack.data
+    if img_tensor.shape[-1] < 5 and len(list(img_tensor.shape)) == 4:
+        tens_corrected = img_tensor[:,:,:,0]
+        tens_corrected = tens_corrected.unsqueeze(0)
+        stack.set_data(tens_corrected)
+    return stack
+
 
 

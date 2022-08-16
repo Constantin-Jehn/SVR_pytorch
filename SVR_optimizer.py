@@ -169,8 +169,8 @@ class SVR_optimizer():
         fixed_image_tensor = self.fixed_image["image"]
         fixed_image_meta = self.fixed_image["image_meta_dict"]
 
-        fake_epoch = int (str(0) + str(3))
-        utils.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,fake_epoch, self.result_folder,self.mode)
+        #fake_epoch = int (str(0) + str(3))
+        #utils.save_intermediate_reconstruction(fixed_image_tensor,fixed_image_meta,fake_epoch, self.result_folder,self.mode)
         
         #use this template for tio-resampling operations of stacks during update
         tio_fixed_image_template = utils.monai_to_torchio(self.fixed_image)
