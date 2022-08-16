@@ -110,7 +110,7 @@ class Preprocesser():
         #stacks = self.outlier_removal(fixed_image, stacks)
 
         
-        fixed_image = utils.resample_fixed_image(fixed_image, init_pix_dim,self.result_folder,self.mode,self.tio_mode)
+        fixed_image = utils.resample_and_save_fixed_image(fixed_image, init_pix_dim,self.result_folder,self.mode,self.tio_mode)
 
 
         ##try cropping better after preregistration

@@ -88,7 +88,7 @@ def save_intermediate_reconstruction_and_upsample(fixed_image_tensor:t.tensor, f
 
         return monai_resampled
 
-def resample_fixed_image(fixed_image:dict, pix_dim:tuple, result_folder:str, mode:str, tio_mode:str)->dict:
+def resample_and_save_fixed_image(fixed_image:dict, pix_dim:tuple, result_folder:str, mode:str, tio_mode:str)->dict:
     """
     Can be used to resample fixed image and saving it as initial image (-1)
 
