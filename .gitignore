@@ -17,6 +17,7 @@ preprocessing_gaussian/
 pytorch-ncc/
 Data_pairs/
 sample_data/
+Clean_Data/
 
 .DS_Store 
 # C extensions

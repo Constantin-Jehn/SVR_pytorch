@@ -208,6 +208,11 @@ def pre_registration_data_generation(data_dir:str):
 
         pre_reg_tio, svr_tio = get_preregistration(data_dir,sub_dir), get_SVR_reconstruction(data_dir,sub_dir)
         pre_reg_tensor, svr_tensor = pre_reg_tio.data, svr_tio.data
+        resampled_mask = svr_optimizer.resampled_masks[0]
+
+        #apply mask
+        pre_reg_tensor = pre_reg_tensor * resampled_mask.data
+
         
         pre_reg_tensor_adjusted = adjust_size_of_preregistration(pre_reg_tensor, svr_tensor)
         pre_reg_tio.set_data(pre_reg_tensor_adjusted)

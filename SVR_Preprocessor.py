@@ -145,7 +145,7 @@ class Preprocesser():
             upsampling (bool, optional): whether or not to upsample fixed image Defaults to False.
             pixdim (int, optional): pix dim to upsample to. Defaults to 0.
         Returns:
-            slice_dimensions (list): For each stack the index of the dimension in which to slice
+            slice_dimensions (list), resampled_masks: For each stack the index of the dimension in which to slice, cropped and resampled masks
         """
         path_mask = os.path.join(self.src_folder, self.mask_filename)
         mask = tio.LabelMap(path_mask)
