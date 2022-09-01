@@ -29,6 +29,7 @@ def get_list_of_all_dirs(data_dir:str)->list:
     current_dir = os.getcwd()
     data_dir_glob = os.path.join(current_dir,data_dir)
     dir_list = [dir for dir in os.listdir(data_dir_glob) if os.path.isdir(os.path.join(data_dir,dir))]
+    dir_list = sorted(dir_list)
     return dir_list
 
 def get_list_of_stacks(data_dir:str, sub_dir:str)->list:
@@ -125,8 +126,11 @@ def pre_registration_data_generation(data_dir:str):
     """
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
     data_directories = get_list_of_all_dirs(data_dir)
-
+    counter = 0
     for sub_dir in data_directories:
+        print(f'Folder {counter}')
+        counter = counter + 1
+
         filenames = get_list_of_stacks(data_dir, sub_dir)
         file_mask = "mask.nii.gz"
 

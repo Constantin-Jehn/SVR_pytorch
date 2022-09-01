@@ -85,15 +85,13 @@ class Preprocesser():
         # load cropped stacks
         stacks = self.load_stacks(to_device=True)
         # denoise stacks
+
+        stacks = self.bias_correction_sitk(stacks)
+
         stacks = self.denoising(stacks)
 
         if save_intermediates:
             stacks = utils.save_stacks(stacks, 'den', self.mode)
-
-        stacks = self.bias_correction_sitk(stacks)
-
-        if save_intermediates:
-            stacks = utils.save_stacks(stacks, 'bias', self.mode)
 
         stacks = self.normalize(stacks)
         #stacks = self.histogram_normalize_stacks(stacks)
@@ -194,6 +192,13 @@ class Preprocesser():
             cropper = tio.CropOrPad(list(roi_size), mask_name='mask')
 
             cropped_stack = cropper(subject)
+            path_dst = os.path.join(self.prep_folder, filename)
+
+            #to see if it'll be in standard planes
+            #cropped_stack.stack.affine(np.eye(4))
+            cropped_stack.stack.save(path_dst)
+
+            #until here it's ok
 
             subject_mask = tio.Subject(stack = resampled_mask, mask = resampled_mask)
             resampled_mask = cropper(subject_mask)
@@ -213,11 +218,7 @@ class Preprocesser():
                     cropped_stack = resampler(cropped_stack)
             """
 
-            path_dst = os.path.join(self.prep_folder, filename)
-
-            #to see if it'll be in standard planes
-            #cropped_stack.stack.affine(np.eye(4))
-            cropped_stack.stack.save(path_dst)
+            
 
         return slice_dimensions, resampled_mask_list
 
@@ -256,6 +257,37 @@ class Preprocesser():
                 stack_dict = to_device(stack_dict)
             stack_list.append(stack_dict)
         return stack_list
+
+    def load_stack_from_path(self, path:str, filename:str) -> dict:
+        """loads a monai stack from path and assigns defined filename
+
+        Args:
+            path (str): from where to read the file
+            filename (str): filename in meta data
+
+        Returns:
+            dict: monai dict
+        """
+        add_channel = AddChanneld(keys=["image"])
+        loader = LoadImaged(keys=["image"])
+        to_tensor = ToTensord(keys=["image"])
+
+        to_device = monai.transforms.ToDeviced(
+            keys=["image"], device=self.device)
+        
+        stack_dict = {"image": path}
+        stack_dict = loader(stack_dict)
+        stack_dict = to_tensor(stack_dict)
+        stack_dict = add_channel(stack_dict)
+        # keep meta data correct
+        stack_dict["image_meta_dict"]["spatial_shape"] = np.array(
+            list(stack_dict["image"].shape)[1:])
+        stack_dict["image_meta_dict"]["filename_or_obj"] = filename
+        # move to gpu
+
+        stack_dict = to_device(stack_dict)
+        return stack_dict
+
 
 
     def denoising(self, stacks:list)->list:
@@ -297,19 +329,19 @@ class Preprocesser():
 
         corrector = sitk.N4BiasFieldCorrectionImageFilter()
         for st in range(0, self.k):
-            path = os.path.join(self.prep_folder,stacks[st]["image_meta_dict"]["filename_or_obj"])
+            path = os.path.join("preprocessing","bias_" + stacks[st]["image_meta_dict"]["filename_or_obj"])
             tio_image = utils.monai_to_torchio(stacks[st])
             tio_image.save(path)
             image = sitk.ReadImage(path, sitk.sitkFloat32)
             denoised_image = corrector.Execute(image)
             sitk.WriteImage(denoised_image, path)
         
-        stacks = self.load_stacks(to_device=True)
+            stacks[st] = self.load_stack_from_path(path,stacks[st]["image_meta_dict"]["filename_or_obj"])
 
         return stacks
 
 
-    def create_common_volume_registration(self, stacks:list, PSF, lr_vol_vol, tensorboard_path = "", resampled_masks:list = [], epochs:int = 18)->tuple:
+    def create_common_volume_registration(self, stacks:list, PSF, lr_vol_vol, tensorboard_path = "", resampled_masks:list = [], epochs:int = 10)->tuple:
         """
         creates common volume and return registered stacks
         Args:
@@ -369,7 +401,7 @@ class Preprocesser():
             transformed_fixed_tensor = transformed_fixed_tensor.detach()
 
             #remove outlier
-            #stacks[st] = self.outlier_removal(transformed_fixed_tensor,stacks[st])
+            stacks[st] = self.outlier_removal(transformed_fixed_tensor,stacks[st])
             #stack_tensor = stacks[st]["image"].unsqueeze(0)
 
             #comment out for control
@@ -386,7 +418,8 @@ class Preprocesser():
             rot_params.append(rot_params_tmp)
             trans_params.append(trans_params_tmp)
 
-            common_tensor = common_tensor + stacks[st]["image"]
+            #adds PSF
+            common_tensor = common_tensor + PSF(stacks[st]["image"])
 
             #stacks[st]["image"] = utils.normalize_zero_to_one(stacks[st]["image"])
 
@@ -467,10 +500,31 @@ class Preprocesser():
         Returns:
             list: normalized stacks
         """
+        overall_max = 0
+        overall_min = 10
+        #cut upper and lower 0.1% of each tensor
+        for st in range(0,len(stacks)):
+            k = int(np.ceil(0.0001 * t.numel(stacks[st]["image"])))
+            top_k_indicies = self.unravel_index(t.topk(stacks[st]["image"].flatten(),k).indices, stacks[st]["image"].shape)
+            low_k_indices = self.unravel_index(t.topk(stacks[st]["image"].flatten(),k, largest=False).indices, stacks[st]["image"].shape)
+            for i in range(0,k):
+                stacks[st]["image"][tuple(top_k_indicies[i,:])] = 0
+                stacks[st]["image"][tuple(low_k_indices[i,:])] = 0
+            
+            ten_flat = stacks[st]["image"].flatten()
+            ten_max, ten_min = t.topk(ten_flat,1).values, t.topk(ten_flat,1,largest=False).values
+            if overall_max < ten_max: overall_max = ten_max
+            if overall_min > ten_min: overall_min = ten_min
+        """
+        tensor_range = overall_max -overall_min
+        for st in range(0,len(stacks)):
+            stacks[st]["image"] = t.div((stacks[st]["image"] - overall_min), tensor_range)
+        """
         for st in range(0,len(stacks)):
             st_tensor = stacks[st]["image"]
             normalizer = tv.transforms.Normalize(t.mean(st_tensor), t.std(st_tensor))
             stacks[st]["image"] = normalizer(st_tensor)
+        
         return stacks
 
     def order_stackfilenames_for_preregistration(self, stack_filenames:list)->list:
@@ -573,4 +627,28 @@ class Preprocesser():
             mask_resampled = resampler(masks[st])
             masks_update.append(mask_resampled)
         return masks_update
+
+    #https://stackoverflow.com/questions/53212507/how-to-efficiently-retrieve-the-indices-of-maximum-values-in-a-torch-tensor
+    def unravel_index(self, indices: t.LongTensor,shape,) -> t.LongTensor:
+        """Converts flat indices into unraveled coordinates in a target shape.
+
+        This is a `torch` implementation of `numpy.unravel_index`.
+
+        Args:
+            indices: A tensor of (flat) indices, (*, N).
+            shape: The targeted shape, (D,).
+
+        Returns:
+            The unraveled coordinates, (*, N, D).
+        """
+
+        coord = []
+
+        for dim in reversed(shape):
+            coord.append(indices % dim)
+            indices = indices // dim
+
+        coord = t.stack(coord[::-1], dim=-1)
+
+        return coord
 

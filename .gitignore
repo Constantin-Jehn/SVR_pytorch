@@ -18,6 +18,9 @@ pytorch-ncc/
 Data_pairs/
 sample_data/
 Clean_Data/
+Good_Reconstruction/
+results/
+runs/
 
 .DS_Store 
 # C extensions
