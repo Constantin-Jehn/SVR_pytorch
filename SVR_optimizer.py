@@ -60,7 +60,7 @@ class SVR_optimizer():
         
         self.svr_preprocessor = Preprocesser(src_folder, prep_folder, result_folder, stack_filenames, mask_filename, device, monai_mode, tio_mode)
         
-        self.fixed_image, self.stacks, self.slice_dimensions, self.rot_params_init, self.trans_params_init, self.resampled_masks = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF, roi_only=roi_only, save_intermediates=True, lr_vol_vol=lr_vol_vol, tensorboard_path = tensorboard_path, pre_reg_epochs=pre_reg_epochs)
+        self.fixed_image, self.stacks, self.slice_dimensions, self.rot_params_init, self.trans_params_init, self.resampled_masks = self.svr_preprocessor.preprocess_stacks_and_common_vol(self.pixdims[0], PSF, roi_only=roi_only, save_intermediates=False, lr_vol_vol=lr_vol_vol, tensorboard_path = tensorboard_path, pre_reg_epochs=pre_reg_epochs)
         
         self.k = len(self.svr_preprocessor.stack_filenames)
         

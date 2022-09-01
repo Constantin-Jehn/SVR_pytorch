@@ -1,5 +1,6 @@
 from ntpath import join
 from sys import path
+from typing import Tuple
 import matplotlib.pyplot as plt
 import monai
 import os
@@ -33,7 +34,7 @@ def get_list_of_all_dirs(data_dir:str)->list:
     return dir_list
 
 def get_list_of_stacks(data_dir:str, sub_dir:str)->list:
-    """_summary_e
+    """gives list of stacks in data_dir/sub_dir, looks for files starting with "stack"
 
     Args:
         data_dir (str): directory in project folder containing the folder of good reconstructions
@@ -65,7 +66,7 @@ def get_SVR_reconstruction(data_dir:str, sub_dir:str)->tio.ScalarImage:
     tio_svr_output = tio.ScalarImage(svr_output_dir_glob)
     return tio_svr_output
 
-def get_preregistration(data_dir:str, sub_dir:str)->tio.ScalarImage:
+def get_preregistration(data_dir:str, sub_dir:str)->Tuple:
     """return preregistration image as tio Scalar image
 
     Args:
@@ -81,7 +82,27 @@ def get_preregistration(data_dir:str, sub_dir:str)->tio.ScalarImage:
     for file in os.listdir(sub_dir_glob):
         if file.endswith("-1.nii.gz"):
             pre_reg_tio = tio.ScalarImage(os.path.join(sub_dir_glob,file))
-    return pre_reg_tio
+            prereg_path = os.path.join(sub_dir_glob,file)
+    return pre_reg_tio, prereg_path
+
+def get_first_iteration(data_dir:str, sub_dir:str)->Tuple:
+    """return preregistration image as tio Scalar image
+
+    Args:
+        data_dir (str): directory in project folder containing the folder of good reconstructions
+        sub_dir (str): sub directory of current stack 
+
+
+    Returns:
+        tio.ScalarImage: tio Scalar image of preregstired file
+    """
+    current_dir = os.getcwd()
+    sub_dir_glob = os.path.join(current_dir,data_dir,sub_dir)
+    for file in os.listdir(sub_dir_glob):
+        if file.endswith("0.nii.gz"):
+            pre_reg_tio = tio.ScalarImage(os.path.join(sub_dir_glob,file))
+            first_it_path = os.path.join(sub_dir_glob,file)
+    return pre_reg_tio, first_it_path
 
 def adjust_size_of_preregistration(pre_reg_tensor:t.tensor, svr_high_res_tensor:t.tensor)->t.tensor:
     """_summary_
@@ -208,17 +229,32 @@ def pre_registration_data_generation(data_dir:str):
         out_file.close()
 
         svr_optimizer = SVR_optimizer(src_folder, prep_folder, result_folder, filenames, file_mask,pixdims, device, PSF, loss_kernel_size, monai_mode = mode, tio_mode = tio_mode, roi_only=roi_only, lr_vol_vol=lr_vol_vol, tensorboard_path = tensorboard_path, pre_reg_epochs=pre_reg_epochs)
-        #svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensorboard_path,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
+        svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensorboard_path,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
 
-        pre_reg_tio, svr_tio = get_preregistration(data_dir,sub_dir), get_SVR_reconstruction(data_dir,sub_dir)
-        pre_reg_tensor, svr_tensor = pre_reg_tio.data, svr_tio.data
+        pre_reg_tio, pre_reg_path = get_preregistration(data_dir,sub_dir)
+        svr_tio = get_SVR_reconstruction(data_dir,sub_dir)
+        first_it_tio, first_it_path = get_first_iteration(data_dir, sub_dir)
+        pre_reg_tensor, svr_tensor, first_it_tensor = pre_reg_tio.data, svr_tio.data, first_it_tio.data
         resampled_mask = svr_optimizer.resampled_masks[0]
 
         #apply mask
-        pre_reg_tensor = pre_reg_tensor * resampled_mask.data
-
+        pre_reg_tensor, first_it_tensor = pre_reg_tensor * resampled_mask.data, first_it_tensor * resampled_mask.data
         
-        pre_reg_tensor_adjusted = adjust_size_of_preregistration(pre_reg_tensor, svr_tensor)
+        pre_reg_tensor_adjusted, first_it_tensor_adjusted = adjust_size_of_preregistration(pre_reg_tensor, svr_tensor), adjust_size_of_preregistration(first_it_tensor, svr_tensor)
         pre_reg_tio.set_data(pre_reg_tensor_adjusted)
+        first_it_tio.set_data(first_it_tensor_adjusted)
+
         path = os.path.join(os.getcwd(),data_dir,sub_dir,"prereg.nii.gz")
         pre_reg_tio.save(path)
+
+        path = os.path.join(os.getcwd(),data_dir,sub_dir,"first_it.nii.gz")
+        first_it_tio.save(path)
+        
+        #clean up folder
+        os.remove(os.path.join(src_folder,"params.json"))
+        os.remove(os.path.join(src_folder,"results.csv"))
+        os.remove(os.path.join(src_folder,"models_optimizers.pt"))
+        os.remove(pre_reg_path)
+        os.remove(first_it_path)
+
+

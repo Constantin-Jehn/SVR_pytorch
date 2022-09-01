@@ -139,6 +139,6 @@ def optimize():
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensorboard_path,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
      
 if __name__ == '__main__':
-    optimize()
+    #optimize()
     #preprocess()
-    #data_generation.pre_registration_data_generation("Good_Reconstruction")
+    data_generation.pre_registration_data_generation("Clean_Data")
