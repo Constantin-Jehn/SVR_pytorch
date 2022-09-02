@@ -11,7 +11,7 @@ import os
 import datetime
 import json
 import data_generation
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 os.environ["taskset"] = "21-40"
 
     
