@@ -23,6 +23,7 @@ import torchvision as tv
 from SVR_outlier_removal import Outlier_Removal_Slices_cste, Outlier_Removal_Voxels
 import utils
 from torch.utils.tensorboard import SummaryWriter
+import shutil
 
 class Preprocesser():
     def __init__(self, src_folder:str, prep_folder:str, result_folder:str, stack_filenames:list, mask_filename:str, device:str, monai_mode:str, tio_mode:str)->None:
@@ -85,6 +86,11 @@ class Preprocesser():
         # load cropped stacks
         stacks = self.load_stacks(to_device=True)
         # denoise stacks
+
+        folder = "preprocessing"
+        path = os.path.join(folder)
+        shutil.rmtree(path)
+        os.mkdir(path)
 
         stacks = self.bias_correction_sitk(stacks)
 
@@ -156,6 +162,9 @@ class Preprocesser():
 
         resampled_mask_list = list()
 
+        shutil.rmtree(self.prep_folder)
+        os.mkdir(self.prep_folder)
+
         for i in range(0, self.k):
             #resample mask to each stack
             filename = self.stack_filenames[i]
@@ -192,11 +201,12 @@ class Preprocesser():
             cropper = tio.CropOrPad(list(roi_size), mask_name='mask')
 
             cropped_stack = cropper(subject)
+            cropped_stack.stack.save(self.prep_folder + "/" + filename)
             path_dst = os.path.join(self.prep_folder, filename)
 
             #to see if it'll be in standard planes
             #cropped_stack.stack.affine(np.eye(4))
-            cropped_stack.stack.save(path_dst)
+            #cropped_stack.stack.save(path_dst)
 
             #until here it's ok
 
@@ -502,6 +512,7 @@ class Preprocesser():
         """
         overall_max = 0
         overall_min = 10
+        """
         #cut upper and lower 0.1% of each tensor
         for st in range(0,len(stacks)):
             k = int(np.ceil(0.0001 * t.numel(stacks[st]["image"])))
@@ -515,7 +526,7 @@ class Preprocesser():
             ten_max, ten_min = t.topk(ten_flat,1).values, t.topk(ten_flat,1,largest=False).values
             if overall_max < ten_max: overall_max = ten_max
             if overall_min > ten_min: overall_min = ten_min
-        """
+
         tensor_range = overall_max -overall_min
         for st in range(0,len(stacks)):
             stacks[st]["image"] = t.div((stacks[st]["image"] - overall_min), tensor_range)

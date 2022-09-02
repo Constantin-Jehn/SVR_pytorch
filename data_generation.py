@@ -238,6 +238,7 @@ def pre_registration_data_generation(data_dir:str):
         resampled_mask = svr_optimizer.resampled_masks[0]
 
         #apply mask
+        first_it_tensor = adjust_size_of_preregistration(first_it_tensor, resampled_mask.data)
         pre_reg_tensor, first_it_tensor = pre_reg_tensor * resampled_mask.data, first_it_tensor * resampled_mask.data
         
         pre_reg_tensor_adjusted, first_it_tensor_adjusted = adjust_size_of_preregistration(pre_reg_tensor, svr_tensor), adjust_size_of_preregistration(first_it_tensor, svr_tensor)
