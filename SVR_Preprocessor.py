@@ -388,11 +388,11 @@ class Preprocesser():
         for st in range(1, self.k):
             stack_tensor = stacks[st]["image"]
             stack_meta = stacks[st]["image_meta_dict"]
-
+            #initialize model loss and optimizer
             model = custom_models.Volume_to_Volume(PSF, device=self.device)
             loss = loss_module.Loss_Volume_to_Volume("ncc", self.device)
             optimizer = t.optim.Adam(model.parameters(), lr=lr_vol_vol)
-
+            #re
             fixed_image_resampled_tensor = utils.resample_fixed_image_to_local_stack(common_tensor,fixed_meta["affine"],stack_tensor,stack_meta["affine"],self.tio_mode,self.device)
             
             stack_tensor = stacks[st]["image"].unsqueeze(0)
