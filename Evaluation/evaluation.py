@@ -30,9 +30,10 @@ def normalize_to_unit_interval(tio_image:tio.ScalarImage):
 
 if __name__ == '__main__':
     #set category to evaluate prereg, image0 or all
-    category = "prereg"
+    category = "test_prereg"
+    base_path = "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/test_lr_0.0002_19_09"
     #generate folder paths
-    folder_cycle, folder_labels, folder_images = create_path(category, "CycleGAN"), create_path(category, "label"), create_path(category, "image")
+    folder_cycle, folder_labels, folder_images = os.path.join(base_path, category, "CycleGAN"), os.path.join(base_path, category, "labels"), os.path.join(base_path, category, "images")
     #get sorted file lists
     files_cycle, files_labels, files_images = get_sorted_file_list (folder_cycle), get_sorted_file_list(folder_labels), get_sorted_file_list(folder_images)
     assert len(files_cycle) == len(files_labels) or len(files_cycle) == len(files_images), f"Evaluation folder should contain same number of files got {len(files_cycle)} CycleGAN, {len(files_labels)} labels and {len(files_images)} images"
@@ -79,6 +80,7 @@ if __name__ == '__main__':
     cycle_to_label_ssim_mean, cycle_to_label_ssim_std = np.mean(np.array(cycle_to_label_ssim)), np.std(np.array(cycle_to_label_ssim))
 
     results = {
+            'path': os.path.join(base_path, category),
             'image_to_label':{
                 'PSNR': {
                     'mean': image_to_label_psnr_mean,
@@ -105,7 +107,7 @@ if __name__ == '__main__':
             }
         }
     
-    result_file_dest = os.path.join(os.getcwd(), category, "metrics.json")
+    result_file_dest = os.path.join(base_path, category, category + "_metrics.json")
     out_file = open(result_file_dest, "w")
     json.dump(results,out_file, indent=6)
     out_file.close()

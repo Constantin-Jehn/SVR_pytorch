@@ -87,10 +87,12 @@ class Preprocesser():
         stacks = self.load_stacks(to_device=True)
         # denoise stacks
 
+        """
         folder = "preprocessing"
         path = os.path.join(folder)
         shutil.rmtree(path)
         os.mkdir(path)
+        """
 
         stacks = self.bias_correction_sitk(stacks)
 

@@ -17,7 +17,7 @@ os.environ["taskset"] = "21-40"
     
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-   
+    """
     filenames = ["stack_1.nii.gz",
                 "stack_2.nii.gz",
                 "stack_3.nii.gz",
@@ -38,7 +38,7 @@ def optimize():
                 
                 "23_3T_nody_001.nii.gz",
                 "23_3T_nody_002.nii.gz"]
-     """
+     
     """
     filenames = ["stack_1.nii.gz",
                 "stack_2.nii.gz",
@@ -46,7 +46,7 @@ def optimize():
                 "stack_4.nii.gz",
                 "stack_5.nii.gz"]
     """
-    file_mask = "mask.nii.gz"
+    file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
     epochs = 1
     inner_epochs = 2
@@ -140,6 +140,6 @@ def optimize():
     svr_optimizer.optimize_volume_to_slice(epochs, inner_epochs, lr, PSF, lambda1, loss_fnc=loss_fnc, opt_alg=opt_alg, tensorboard=True, tensorboard_path=tensorboard_path,from_checkpoint=from_checkpoint, last_rec_file=last_rec_file, last_epoch = last_epoch)
      
 if __name__ == '__main__':
-    #optimize()
+    optimize()
     #preprocess()
-    data_generation.pre_registration_data_generation("Clean_Data")
+    #data_generation.pre_registration_data_generation("Clean_Data")
