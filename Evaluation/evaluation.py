@@ -10,6 +10,7 @@ import torchmetrics as tm
 import os
 import numpy as np
 import json
+import pandas as pd
 
 def create_path(category: str, folder_name:str)->str:
     return os.path.join(os.getcwd(), category, folder_name)
@@ -28,15 +29,36 @@ def normalize_to_unit_interval(tio_image:tio.ScalarImage):
     tio_image.set_data(norm_data)
     return tio_image
 
+def write_in_overview_file(file_path:str, category, image_to_label_mean, image_to_label_std, image_to_label_sem, cycle_to_label_mean, cycle_to_label_std, cycle_to_label_sem):
+    
+    json_obj = open(file_path)
+    PSNR_json = json.load(json_obj)
+
+    PSNR_json[category]["image_to_label_means"][lr] = image_to_label_mean
+    PSNR_json[category]["image_to_label_std"][lr] = image_to_label_std
+    PSNR_json[category]["image_to_label_sem"][lr] = image_to_label_sem
+
+    PSNR_json[category]["cycle_to_label_means"][lr] = cycle_to_label_mean
+    PSNR_json[category]["cylce_to_label_std"][lr] = cycle_to_label_std
+    PSNR_json[category]["cycle_to_label_sem"][lr] = cycle_to_label_sem
+
+    out_file = open(file_path, "w")
+    json.dump(PSNR_json,out_file, indent=6)
+    out_file.close()
+
 if __name__ == '__main__':
+    #set learning rate to store data in overview
+    lr = "lr=0.0004"
+    PSNR_overview_path = "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/PSNR_results_all.json"
+    SSIM_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/SSIM_results_all.json"
     #set category to evaluate prereg, image0 or all
     category = "test_prereg"
-    base_path = "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/test_lr_0.0002_19_09"
+    base_path = "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/test_lr_0.0004_19_09"
     #generate folder paths
     folder_cycle, folder_labels, folder_images = os.path.join(base_path, category, "CycleGAN"), os.path.join(base_path, category, "labels"), os.path.join(base_path, category, "images")
     #get sorted file lists
     files_cycle, files_labels, files_images = get_sorted_file_list (folder_cycle), get_sorted_file_list(folder_labels), get_sorted_file_list(folder_images)
-    assert len(files_cycle) == len(files_labels) or len(files_cycle) == len(files_images), f"Evaluation folder should contain same number of files got {len(files_cycle)} CycleGAN, {len(files_labels)} labels and {len(files_images)} images"
+    assert len(files_cycle) == len(files_labels) and len(files_cycle) == len(files_images), f"Evaluation folder should contain same number of files got {len(files_cycle)} CycleGAN, {len(files_labels)} labels and {len(files_images)} images"
     n_files = len(files_cycle)
 
     #define similarity metrics
@@ -50,7 +72,7 @@ if __name__ == '__main__':
     for n in range(0,n_files):
         #in sorted list the the files should match -> check by first 2 elements
         cycle_id, label_id, image_id = files_cycle[n][:2], files_labels[n][:2], files_images[n][:2]
-        assert cycle_id == image_id or cycle_id == label_id, f"Comparing file ids should match, but got cycle_id: {cycle_id}, label_id: {label_id}, image_id: {image_id}"
+        assert cycle_id == image_id and cycle_id == label_id, f"Comparing file ids should match, but got cycle_id: {cycle_id}, label_id: {label_id}, image_id: {image_id}"
 
         #get absolute paths to current images
         cylce_path, label_path, image_path = os.path.join(folder_cycle,files_cycle[n]), os.path.join(folder_labels, files_labels[n]), os.path.join(folder_images, files_images[n])
@@ -74,10 +96,16 @@ if __name__ == '__main__':
         cycle_to_label_ssim.append(tm_ssim(tensor_cycle,tensor_label).item())
 
     image_to_label_psnr_mean, image_to_label_psnr_std = np.mean(np.array(image_to_label_psnr)), np.std(np.array(image_to_label_psnr))
+    image_to_label_psnr_sem = image_to_label_psnr_std / np.sqrt(n_files)
+
     image_to_label_ssim_mean, image_to_label_ssim_std = np.mean(np.array(image_to_label_ssim)), np.std(np.array(image_to_label_ssim))
+    image_to_label_ssim_sem = image_to_label_ssim_std / np.sqrt(n_files)
 
     cycle_to_label_psnr_mean, cycle_to_label_psnr_std = np.mean(np.array(cycle_to_label_psnr)), np.std(np.array(cycle_to_label_psnr))
+    cycle_to_label_psnr_sem = cycle_to_label_psnr_std / np.sqrt(n_files)
+
     cycle_to_label_ssim_mean, cycle_to_label_ssim_std = np.mean(np.array(cycle_to_label_ssim)), np.std(np.array(cycle_to_label_ssim))
+    cycle_to_label_ssim_sem = cycle_to_label_ssim_std / np.sqrt(n_files)
 
     results = {
             'path': os.path.join(base_path, category),
@@ -85,11 +113,13 @@ if __name__ == '__main__':
                 'PSNR': {
                     'mean': image_to_label_psnr_mean,
                     'std': image_to_label_psnr_std,
+                    'sem': image_to_label_psnr_sem,
                     'values':image_to_label_psnr    
                 },
                 'SSIM': {
                     'mean': image_to_label_ssim_mean,
                     'std': image_to_label_ssim_std,
+                    'sem': image_to_label_ssim_sem,
                     'values':image_to_label_ssim    
                 } 
             },
@@ -97,11 +127,13 @@ if __name__ == '__main__':
                 'PSNR':{
                     'mean': cycle_to_label_psnr_mean,
                     'std': cycle_to_label_psnr_std,
+                    'sem': cycle_to_label_psnr_sem,
                     'values': cycle_to_label_psnr
                 },
                 'SSIM': {
                     'mean': cycle_to_label_ssim_mean,
                     'std': cycle_to_label_ssim_std,
+                    'sem': cycle_to_label_ssim_sem,
                     'values': cycle_to_label_ssim    
                 } 
             }
@@ -111,6 +143,13 @@ if __name__ == '__main__':
     out_file = open(result_file_dest, "w")
     json.dump(results,out_file, indent=6)
     out_file.close()
+
+    write_in_overview_file(PSNR_overview_path, category, image_to_label_psnr_mean, image_to_label_psnr_std, image_to_label_psnr_sem, cycle_to_label_psnr_mean, cycle_to_label_psnr_std, cycle_to_label_psnr_sem)
+    write_in_overview_file(SSIM_overview_path,category, image_to_label_ssim_mean, image_to_label_ssim_std, image_to_label_ssim_sem, cycle_to_label_ssim_mean, cycle_to_label_ssim_std, cycle_to_label_ssim_sem)
+
+
+
+    
 
 
 
