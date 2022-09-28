@@ -49,11 +49,11 @@ def write_in_overview_file(file_path:str, category, image_to_label_mean, image_t
 if __name__ == '__main__':
     #set learning rate to store data in overview
     lr = "lr=0.0004"
-    PSNR_overview_path = "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/PSNR_results_all.json"
-    SSIM_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/SSIM_results_all.json"
+    PSNR_overview_path = "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/PSNR_results_all_cross_val_2.json"
+    SSIM_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/SSIM_results_all_cross_val_2.json"
     #set category to evaluate prereg, image0 or all
     category = "test_prereg"
-    base_path = "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/test_lr_0.0004_19_09"
+    base_path = "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/test_lr_0.00.4_cross_22_09"
     #generate folder paths
     folder_cycle, folder_labels, folder_images = os.path.join(base_path, category, "CycleGAN"), os.path.join(base_path, category, "labels"), os.path.join(base_path, category, "images")
     #get sorted file lists
