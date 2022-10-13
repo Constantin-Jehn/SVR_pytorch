@@ -7,6 +7,8 @@ from monai.transforms import (
 )
 import torchio as tio
 import torchmetrics as tm
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+lpips_metric = LearnedPerceptualImagePatchSimilarity(net_type='vgg')
 import os
 import numpy as np
 import json
@@ -59,20 +61,46 @@ def nmse(input_tensor, target_tensor):
     nmse = t.div(nominator, denominator).item()
     return nmse
 
+def lpip_input_format(image_2d:t.tensor):
+    #bring to [-1,1] range
+    image_2d = t.mul(image_2d,2) - 1
+    #formate [N,3,H,W]
+    return image_2d.repeat(3,1,1).unsqueeze(0)
+
+def lpips(input_tensor, target_tensor):
+    #lpip expect 3 channel image
+    input_tensor, target_tensor = input_tensor.squeeze(), target_tensor.squeeze()
+    #get middle dimension to extract 2d images
+    tensor_shapes = input_tensor.shape
+    dim_0_mid, dim_1_mid, dim_2_mid = int(t.round(t.div(tensor_shapes[0],2)).item()), int(t.round(t.div(tensor_shapes[1],2)).item()),int(t.round(t.div(tensor_shapes[2],2)).item())
+
+    input_image_0, input_image_1, input_image_2 = input_tensor[dim_0_mid,:,:], input_tensor[:,dim_1_mid], input_tensor[:,:, dim_2_mid]
+    target_image_0, target_image_1, target_image2 = target_tensor[dim_0_mid,:,:], target_tensor[:,dim_1_mid], target_tensor[:,:,dim_2_mid]
+    input_image_0, input_image_1, input_image_2 = lpip_input_format(input_image_0), lpip_input_format(input_image_1), lpip_input_format(input_image_2)
+    target_image_0, target_image_1, target_image2 = lpip_input_format(target_image_0), lpip_input_format(target_image_1), lpip_input_format(target_image2)
+    lpip_values = t.tensor([lpips_metric(input_image_0, target_image_0), lpips_metric(input_image_1, target_image_1), lpips_metric(input_image_2, target_image2)])
+    result = lpip_values.mean().item()
+    
+    return result
+
+
 
 if __name__ == '__main__':
     #set learning rate to store data in overview
     lr_list = ["lr=0.001", "lr=0.0004", "lr=0.0002"]
+    
     base_path_list = ["/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/test_lr_0.001_cross_1_27_09",
     "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/test_lr_0.0004_19_09",
     "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/test_lr_0.0002_19_09",
     ]
+
     category_list = ["test_all", "test_prereg","test_image0"]
     
     PSNR_overview_path = "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/PSNR_results_all.json"
     SSIM_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/SSIM_results_all.json"
     NCC_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/NCC_results_all.json"
     NMSE_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/NMSE_results_all.json"
+    LPIPS_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/LPIPS_results_all.json"
     
     #set category to evaluate test_prereg, test_image0 or test_all
     for i in range(0,len(lr_list)):
@@ -97,6 +125,7 @@ if __name__ == '__main__':
             #define lists to store values
             image_to_label_psnr, image_to_label_ssim, cycle_to_label_psnr, cycle_to_label_ssim = [], [], [], []
             image_to_label_ncc, cycle_to_label_ncc, image_to_label_nmse, cycle_to_label_nmse = [],[],[], []
+            image_to_label_lpips, cycle_to_label_lpips = [],[]
 
             for n in range(0,n_files):
                 #in sorted list the the files should match -> check by first 2 elements
@@ -118,15 +147,18 @@ if __name__ == '__main__':
                 tensor_cycle, tensor_image, tensor_label = tio_cycle.data.float(), tio_image.data.float(), tio_label.data.float()
                 
                 #fill metric lists
+                
                 image_to_label_psnr.append(monai_psnr(tensor_image, tensor_label).item())
                 image_to_label_ssim.append(tm_ssim(tensor_image, tensor_label).item())
                 image_to_label_ncc.append(monai_ncc(tensor_image.unsqueeze(0), tensor_label.unsqueeze(0)).item())
                 image_to_label_nmse.append(nmse(tensor_image, tensor_label))
+                image_to_label_lpips.append(lpips(tensor_image, tensor_label))
 
                 cycle_to_label_psnr.append(monai_psnr(tensor_cycle, tensor_label).item())
                 cycle_to_label_ssim.append(tm_ssim(tensor_cycle,tensor_label).item())
                 cycle_to_label_ncc.append(monai_ncc(tensor_cycle.unsqueeze(0), tensor_label.unsqueeze(0)).item())
                 cycle_to_label_nmse.append(nmse(tensor_cycle, tensor_label))
+                cycle_to_label_lpips.append(lpips(tensor_cycle, tensor_label))
 
 
             #aggregate means, std, sem
@@ -134,12 +166,16 @@ if __name__ == '__main__':
             image_to_label_ssim_mean, image_to_label_ssim_std, image_to_label_ssim_sem = get_mean_std_sem(image_to_label_ssim, n_files)
             image_to_label_ncc_mean, image_to_label_ncc_std, image_to_label_ncc_sem = get_mean_std_sem(image_to_label_ncc, n_files)
             image_to_label_nmse_mean, image_to_label_nmse_std, image_to_label_nmse_sem = get_mean_std_sem(image_to_label_nmse, n_files)
+            image_to_label_lpips_mean, image_to_label_lpips_std, image_to_label_lpips_sem = get_mean_std_sem(image_to_label_lpips, n_files)
+
 
             cycle_to_label_psnr_mean, cycle_to_label_psnr_std, cycle_to_label_psnr_sem = get_mean_std_sem(cycle_to_label_psnr, n_files)
             cycle_to_label_ssim_mean, cycle_to_label_ssim_std, cycle_to_label_ssim_sem = get_mean_std_sem(cycle_to_label_ssim, n_files)
             cycle_to_label_ncc_mean, cycle_to_label_ncc_std, cycle_to_label_ncc_sem = get_mean_std_sem(cycle_to_label_ncc, n_files)
             cycle_to_label_nmse_mean, cycle_to_label_nmse_std, cycle_to_label_nmse_sem = get_mean_std_sem(cycle_to_label_nmse, n_files)
+            cycle_to_label_lpips_mean, cycle_to_label_lpips_std, cycle_to_label_lpips_sem = get_mean_std_sem(cycle_to_label_lpips, n_files)
 
+            
             results = {
                     'path': os.path.join(base_path, category),
                     'image_to_label':{
@@ -166,6 +202,12 @@ if __name__ == '__main__':
                             'std': image_to_label_nmse_std,
                             'sem': image_to_label_nmse_sem,
                             'values':image_to_label_nmse    
+                        },
+                        'LPIPS': {
+                            'mean': image_to_label_lpips_mean,
+                            'std': image_to_label_lpips_std,
+                            'sem': image_to_label_lpips_sem,
+                            'values':image_to_label_lpips    
                         }
                     },
                     'cycle_to_label':{
@@ -192,6 +234,12 @@ if __name__ == '__main__':
                             'std': cycle_to_label_nmse_std,
                             'sem': cycle_to_label_nmse_sem,
                             'values': cycle_to_label_nmse    
+                        },
+                        'LPIPS': {
+                            'mean': cycle_to_label_lpips_mean,
+                            'std': cycle_to_label_lpips_std,
+                            'sem': cycle_to_label_lpips_sem,
+                            'values':cycle_to_label_lpips    
                         }
                     }
                 }
@@ -200,14 +248,16 @@ if __name__ == '__main__':
             out_file = open(result_file_dest, "w")
             json.dump(results,out_file, indent=6)
             out_file.close()
-
+            
+            
+            
             write_in_overview_file(PSNR_overview_path, category, lr, image_to_label_psnr_mean, image_to_label_psnr_std, image_to_label_psnr_sem, cycle_to_label_psnr_mean, cycle_to_label_psnr_std, cycle_to_label_psnr_sem)
             write_in_overview_file(SSIM_overview_path,category, lr, image_to_label_ssim_mean, image_to_label_ssim_std, image_to_label_ssim_sem, cycle_to_label_ssim_mean, cycle_to_label_ssim_std, cycle_to_label_ssim_sem)
             write_in_overview_file(NCC_overview_path,category, lr, image_to_label_ncc_mean, image_to_label_ncc_std, image_to_label_ncc_sem, cycle_to_label_ncc_mean, cycle_to_label_ncc_std, cycle_to_label_ncc_sem)
             write_in_overview_file(NMSE_overview_path,category, lr, image_to_label_nmse_mean, image_to_label_nmse_std, image_to_label_nmse_sem, cycle_to_label_nmse_mean, cycle_to_label_nmse_std, cycle_to_label_nmse_sem)
+            write_in_overview_file(LPIPS_overview_path,category, lr, image_to_label_lpips_mean, image_to_label_lpips_std, image_to_label_lpips_sem, cycle_to_label_lpips_mean, cycle_to_label_lpips_std, cycle_to_label_lpips_sem)
 
-
-
+            print(f'category: {category}, : {lr_list[i]}')
 
 
 
