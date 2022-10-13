@@ -67,6 +67,23 @@ def lpip_input_format(image_2d:t.tensor):
     #formate [N,3,H,W]
     return image_2d.repeat(3,1,1).unsqueeze(0)
 
+def lpip_over_volume(input_tensor,target_tensor,dimension):
+    n = input_tensor.shape[dimension]
+    lpip_values = []
+    for i in range(0,n):
+        if dimension == 0:
+            input_2d, target_2d = input_tensor[i,:,:], target_tensor[i,:,:]
+        if dimension == 1:
+            input_2d, target_2d = input_tensor[:,i,:], target_tensor[:,i,:]
+        if dimension == 2:
+            input_2d, target_2d = input_tensor[:,:,i], target_tensor[:,:,i]
+        if i == 0:
+            input_stack, target_stack =  input_2d.repeat(3,1,1).unsqueeze(0), target_2d.repeat(3,1,1).unsqueeze(0)
+        else:
+            input_stack, target_stack = t.cat((input_stack,input_2d.repeat(3,1,1).unsqueeze(0))), t.cat((target_stack,target_2d.repeat(3,1,1).unsqueeze(0)))
+    return input_stack, target_stack
+
+
 def lpips(input_tensor, target_tensor):
     #lpip expect 3 channel image
     input_tensor, target_tensor = input_tensor.squeeze(), target_tensor.squeeze()
@@ -74,15 +91,23 @@ def lpips(input_tensor, target_tensor):
     tensor_shapes = input_tensor.shape
     dim_0_mid, dim_1_mid, dim_2_mid = int(t.round(t.div(tensor_shapes[0],2)).item()), int(t.round(t.div(tensor_shapes[1],2)).item()),int(t.round(t.div(tensor_shapes[2],2)).item())
 
-    input_image_0, input_image_1, input_image_2 = input_tensor[dim_0_mid,:,:], input_tensor[:,dim_1_mid], input_tensor[:,:, dim_2_mid]
-    target_image_0, target_image_1, target_image2 = target_tensor[dim_0_mid,:,:], target_tensor[:,dim_1_mid], target_tensor[:,:,dim_2_mid]
+    delta = 2
+    input_image_0, input_image_1, input_image_2 = input_tensor[dim_0_mid-delta:dim_0_mid + delta,:,:], input_tensor[:,dim_1_mid-delta:dim_1_mid+delta,:], input_tensor[:,:, dim_2_mid-delta:dim_2_mid+delta]
+    
+    target_image_0, target_image_1, target_image_2 = target_tensor[dim_0_mid-delta:dim_0_mid+delta,:,:], target_tensor[:,dim_1_mid-delta:dim_1_mid+delta,:], target_tensor[:,:,dim_2_mid-delta:dim_2_mid+delta]
+    
+    """
     input_image_0, input_image_1, input_image_2 = lpip_input_format(input_image_0), lpip_input_format(input_image_1), lpip_input_format(input_image_2)
     target_image_0, target_image_1, target_image2 = lpip_input_format(target_image_0), lpip_input_format(target_image_1), lpip_input_format(target_image2)
-    lpip_values = t.tensor([lpips_metric(input_image_0, target_image_0), lpips_metric(input_image_1, target_image_1), lpips_metric(input_image_2, target_image2)])
-    result = lpip_values.mean().item()
+    """
+    input_image_0, target_image_0 = lpip_over_volume(input_image_0, target_image_0,0)
+    input_image_1, target_image_1 = lpip_over_volume(input_image_1, target_image_1,1)
+    input_image_2, target_image_2 = lpip_over_volume(input_image_2, target_image_2,2)
+
+    lpip_values_dim_0, lpip_values_dim_1, lpip_values_dim_2 = lpips_metric(input_image_0, target_image_0), lpips_metric(input_image_1, target_image_1), lpips_metric(input_image_2, target_image_2)
+    result = t.mean(t.tensor([lpip_values_dim_0, lpip_values_dim_1, lpip_values_dim_2])).item()
     
     return result
-
 
 
 if __name__ == '__main__':
@@ -100,7 +125,7 @@ if __name__ == '__main__':
     SSIM_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/SSIM_results_all.json"
     NCC_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/NCC_results_all.json"
     NMSE_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/NMSE_results_all.json"
-    LPIPS_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/LPIPS_results_all.json"
+    LPIPS_overview_path =  "/Users/constantin/Documents/05_FAU_CE/4.Semester/Msc/Cycle_GAN_results/LPIPS_results_all_20.json"
     
     #set category to evaluate test_prereg, test_image0 or test_all
     for i in range(0,len(lr_list)):
@@ -147,35 +172,41 @@ if __name__ == '__main__':
                 tensor_cycle, tensor_image, tensor_label = tio_cycle.data.float(), tio_image.data.float(), tio_label.data.float()
                 
                 #fill metric lists
-                
+                """
                 image_to_label_psnr.append(monai_psnr(tensor_image, tensor_label).item())
                 image_to_label_ssim.append(tm_ssim(tensor_image, tensor_label).item())
                 image_to_label_ncc.append(monai_ncc(tensor_image.unsqueeze(0), tensor_label.unsqueeze(0)).item())
                 image_to_label_nmse.append(nmse(tensor_image, tensor_label))
+                """
                 image_to_label_lpips.append(lpips(tensor_image, tensor_label))
 
+                """
                 cycle_to_label_psnr.append(monai_psnr(tensor_cycle, tensor_label).item())
                 cycle_to_label_ssim.append(tm_ssim(tensor_cycle,tensor_label).item())
                 cycle_to_label_ncc.append(monai_ncc(tensor_cycle.unsqueeze(0), tensor_label.unsqueeze(0)).item())
                 cycle_to_label_nmse.append(nmse(tensor_cycle, tensor_label))
+                """
                 cycle_to_label_lpips.append(lpips(tensor_cycle, tensor_label))
 
 
             #aggregate means, std, sem
+            """
             image_to_label_psnr_mean, image_to_label_psnr_std, image_to_label_psnr_sem = get_mean_std_sem(image_to_label_psnr, n_files)
             image_to_label_ssim_mean, image_to_label_ssim_std, image_to_label_ssim_sem = get_mean_std_sem(image_to_label_ssim, n_files)
             image_to_label_ncc_mean, image_to_label_ncc_std, image_to_label_ncc_sem = get_mean_std_sem(image_to_label_ncc, n_files)
             image_to_label_nmse_mean, image_to_label_nmse_std, image_to_label_nmse_sem = get_mean_std_sem(image_to_label_nmse, n_files)
+            """
             image_to_label_lpips_mean, image_to_label_lpips_std, image_to_label_lpips_sem = get_mean_std_sem(image_to_label_lpips, n_files)
 
-
+            """
             cycle_to_label_psnr_mean, cycle_to_label_psnr_std, cycle_to_label_psnr_sem = get_mean_std_sem(cycle_to_label_psnr, n_files)
             cycle_to_label_ssim_mean, cycle_to_label_ssim_std, cycle_to_label_ssim_sem = get_mean_std_sem(cycle_to_label_ssim, n_files)
             cycle_to_label_ncc_mean, cycle_to_label_ncc_std, cycle_to_label_ncc_sem = get_mean_std_sem(cycle_to_label_ncc, n_files)
             cycle_to_label_nmse_mean, cycle_to_label_nmse_std, cycle_to_label_nmse_sem = get_mean_std_sem(cycle_to_label_nmse, n_files)
+            """
             cycle_to_label_lpips_mean, cycle_to_label_lpips_std, cycle_to_label_lpips_sem = get_mean_std_sem(cycle_to_label_lpips, n_files)
 
-            
+            """
             results = {
                     'path': os.path.join(base_path, category),
                     'image_to_label':{
@@ -248,13 +279,14 @@ if __name__ == '__main__':
             out_file = open(result_file_dest, "w")
             json.dump(results,out_file, indent=6)
             out_file.close()
+            """
             
-            
-            
+            """
             write_in_overview_file(PSNR_overview_path, category, lr, image_to_label_psnr_mean, image_to_label_psnr_std, image_to_label_psnr_sem, cycle_to_label_psnr_mean, cycle_to_label_psnr_std, cycle_to_label_psnr_sem)
             write_in_overview_file(SSIM_overview_path,category, lr, image_to_label_ssim_mean, image_to_label_ssim_std, image_to_label_ssim_sem, cycle_to_label_ssim_mean, cycle_to_label_ssim_std, cycle_to_label_ssim_sem)
             write_in_overview_file(NCC_overview_path,category, lr, image_to_label_ncc_mean, image_to_label_ncc_std, image_to_label_ncc_sem, cycle_to_label_ncc_mean, cycle_to_label_ncc_std, cycle_to_label_ncc_sem)
             write_in_overview_file(NMSE_overview_path,category, lr, image_to_label_nmse_mean, image_to_label_nmse_std, image_to_label_nmse_sem, cycle_to_label_nmse_mean, cycle_to_label_nmse_std, cycle_to_label_nmse_sem)
+            """
             write_in_overview_file(LPIPS_overview_path,category, lr, image_to_label_lpips_mean, image_to_label_lpips_std, image_to_label_lpips_sem, cycle_to_label_lpips_mean, cycle_to_label_lpips_std, cycle_to_label_lpips_sem)
 
             print(f'category: {category}, : {lr_list[i]}')
