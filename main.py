@@ -1,4 +1,4 @@
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import monai
 import os
 import numpy as np
