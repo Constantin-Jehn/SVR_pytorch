@@ -1,4 +1,4 @@
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import monai
 import os
 import numpy as np
@@ -17,16 +17,6 @@ os.environ["taskset"] = "21-40"
     
 def optimize():
     device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-    """
-    filenames = ["stack_1.nii.gz",
-                "stack_2.nii.gz",
-                "stack_3.nii.gz",
-                "stack_4.nii.gz",
-                "stack_5.nii.gz",
-                "stack_6.nii.gz"
-                ]
-    
-    """
     filenames = ["14_3T_nody_001.nii.gz",
                 "14_3T_nody_002.nii.gz",
 
@@ -39,13 +29,6 @@ def optimize():
                 "23_3T_nody_001.nii.gz",
                 "23_3T_nody_002.nii.gz"]
      
-    """
-    filenames = ["stack_1.nii.gz",
-                "stack_2.nii.gz",
-                "stack_3.nii.gz",
-                "stack_4.nii.gz",
-                "stack_5.nii.gz"]
-    """
     file_mask = "mask_10_3T_brain_smooth.nii.gz"
     
     epochs = 1
